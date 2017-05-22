@@ -2,18 +2,17 @@ package bithumb
 
 //JSON DataStruct
 //Public Apis
-
 type JsonTicker struct {
 	Data struct {
-		AveragePrice string `json:"average_price"`
-		ClosingPrice string `json:"closing_price"`
-		Date         int    `json:"date"`
-		MaxPrice     string `json:"max_price"`
-		MinPrice     string `json:"min_price"`
-		OpeningPrice string `json:"opening_price"`
-		UnitsTraded  string `json:"units_traded"`
-		Volume1day   string `json:"volume_1day"`
-		Volume7day   string `json:"volume_7day"`
+		AveragePrice float64 `json:"average_price,string"`
+		ClosingPrice float64 `json:"closing_price,string"`
+		Date         uint64 `json:"date,string"`
+		MaxPrice     float64 `json:"max_price,string"`
+		MinPrice     float64 `json:"min_price,string"`
+		OpeningPrice float64 `json:"opening_price,string"`
+		UnitsTraded  float64 `json:"units_traded,string"`
+		Volume1day   float64 `json:"volume_1day,string"`
+		Volume7day   float64 `json:"volume_7day,string"`
 	} `json:"data"`
 	Status string `json:"status"`
 }
@@ -21,24 +20,24 @@ type JsonTicker struct {
 type JsonOrderbook struct {
 	Data struct {
 		Asks []struct {
-			Price    string `json:"price"`
-			Quantity string `json:"quantity"`
+			Price    float64 `json:"price,string"`
+			Quantity float64 `json:"quantity,string"`
 		} `json:"asks"`
 		Bids []struct {
-			Price    string `json:"price"`
-			Quantity string `json:"quantity"`
+			Price    float64 `json:"price,string"`
+			Quantity float64 `json:"quantity,string"`
 		} `json:"bids"`
-		OrderCurrency   string `json:"order_currency"`
-		PaymentCurrency string `json:"payment_currency"`
-		Timestamp       int    `json:"timestamp"`
+		OrderCurrency   float64 `json:"order_currency,string"`
+		PaymentCurrency float64 `json:"payment_currency,string"`
+		Timestamp       uint64    `json:"timestamp,string"`
 	} `json:"data"`
 	Status string `json:"status"`
 }
 
 type JsonRecentTransaction struct {
 	Data []struct {
-		Price           string `json:"price"`
-		Total           string `json:"total"`
+		Price           float64 `json:"price"`
+		Total           float64 `json:"total"`
 		TransactionDate string `json:"transaction_date"`
 		Type            string `json:"type"`
 		UnitsTraded     string `json:"units_traded"`
