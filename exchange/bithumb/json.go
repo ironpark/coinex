@@ -2,18 +2,20 @@ package bithumb
 
 //JSON DataStruct
 //Public Apis
+type JsonTickerData struct {
+	AveragePrice float64 `json:"average_price,string"`
+	ClosingPrice float64 `json:"closing_price,string"`
+	Date         uint64 `json:"date,string"`
+	MaxPrice     float64 `json:"max_price,string"`
+	MinPrice     float64 `json:"min_price,string"`
+	OpeningPrice float64 `json:"opening_price,string"`
+	UnitsTraded  float64 `json:"units_traded,string"`
+	Volume1day   float64 `json:"volume_1day,string"`
+	Volume7day   float64 `json:"volume_7day,string"`
+}
+
 type JsonTicker struct {
-	Data struct {
-		AveragePrice float64 `json:"average_price,string"`
-		ClosingPrice float64 `json:"closing_price,string"`
-		Date         uint64 `json:"date,string"`
-		MaxPrice     float64 `json:"max_price,string"`
-		MinPrice     float64 `json:"min_price,string"`
-		OpeningPrice float64 `json:"opening_price,string"`
-		UnitsTraded  float64 `json:"units_traded,string"`
-		Volume1day   float64 `json:"volume_1day,string"`
-		Volume7day   float64 `json:"volume_7day,string"`
-	} `json:"data"`
+	Data JsonTickerData `json:"data"`
 	Status string `json:"status"`
 }
 
@@ -34,14 +36,17 @@ type JsonOrderbook struct {
 	Status string `json:"status"`
 }
 
+
+type JsonRecentTransactionData struct {
+	Price           float64 `json:"price"`
+	Total           float64 `json:"total"`
+	TransactionDate string `json:"transaction_date"`
+	Type            string `json:"type"`
+	UnitsTraded     string `json:"units_traded"`
+}
+
 type JsonRecentTransaction struct {
-	Data []struct {
-		Price           float64 `json:"price"`
-		Total           float64 `json:"total"`
-		TransactionDate string `json:"transaction_date"`
-		Type            string `json:"type"`
-		UnitsTraded     string `json:"units_traded"`
-	} `json:"data"`
+	Data []JsonRecentTransactionData `json:"data"`
 	Status string `json:"status"`
 }
 

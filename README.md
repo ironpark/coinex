@@ -11,6 +11,6 @@ The following exchanges will be supported.
 4. Bittrex
 
 My Ethereum Wallet :
-0x38C3E348E2E5eC008547E8279B049F82D9Ea43d1
+0x7EA84eFF0f9D3bd2EaD6Db190A4387B71ac42b44
 
 

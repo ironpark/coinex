@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"io/ioutil"
 	"encoding/json"
-	"fmt"
+	"strings"
 	"github.com/iris-contrib/errors"
 )
 
@@ -18,43 +18,45 @@ func NewEXBitumb() (*EX_Bitumb) {
 	return c
 }
 
-func (ex *EX_Bitumb)GetTicker(currency string) (ticker JsonTicker,err error) {
+func (ex *EX_Bitumb)GetTicker(currency string) (JsonTickerData,error) {
+	var err error = nil
 	resp := ex.callPublicApi("ticker/"+currency)
+	ticker := JsonTicker{}
 	if resp != nil {
-		fmt.Println("FUCK!6!")
 		err = json.Unmarshal(resp, &ticker)
 		if err != nil{
-			fmt.Println(err.Error())
-			return JsonTicker{},err
+			return JsonTickerData{},err
 		}
-		fmt.Println("FUCK!5!")
 	} else {
-		fmt.Println("FUCK!1!")
 		errors.New("Fail Call Api")
 	}
-	fmt.Println("FUCK!!")
+
 	err = ex.getError(ticker.Status)
 	if err != nil {
-		return JsonTicker{},err
+		return JsonTickerData{},err
 	}
-	return ticker,err
+
+	return ticker.Data,nil
 }
 
-func (ex *EX_Bitumb)GetTransactions(currency string) (transaction JsonRecentTransaction,err error) {
+func (ex *EX_Bitumb) GetTransactions(currency string) ([]JsonRecentTransactionData,error) {
+	var err error = nil
+	transaction := JsonRecentTransaction{}
 	resp := ex.callPublicApi("recent_transactions/"+currency)
 	if resp != nil {
 		err = json.Unmarshal(resp, &transaction)
 		if err != nil{
-			return JsonRecentTransaction{},err
+			return nil,err
 		}
 	} else {
 		errors.New("Fail Call Api")
 	}
+
 	err = ex.getError(transaction.Status)
 	if err != nil {
-		return JsonRecentTransaction{},err
+		return nil,err
 	}
-	return transaction,err
+	return transaction.Data,err
 }
 
 func (ex *EX_Bitumb)GetOrderbook(currency string) (orderbook JsonOrderbook,err error) {
@@ -103,9 +105,14 @@ func  (ex *EX_Bitumb) callPublicApi(endpoint string) ([]byte){
 	var api_url = "https://api.bithumb.com/public/" + endpoint
 	// Connects to Bithumb API server and returns JSON result value.
 	response, err := http.Get(api_url)
+	if err != nil {
+		return nil
+	}
 	contents, err := ioutil.ReadAll(response.Body)
 
 	if err == nil {
+		//sometimes resp in "\\"
+		contents = []byte(strings.Replace(string(contents),"\\","",-1));
 		return contents
 	}
 	return nil
