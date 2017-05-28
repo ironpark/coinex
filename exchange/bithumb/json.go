@@ -29,9 +29,9 @@ type JsonOrderbook struct {
 			Price    float64 `json:"price,string"`
 			Quantity float64 `json:"quantity,string"`
 		} `json:"bids"`
-		OrderCurrency   float64 `json:"order_currency,string"`
-		PaymentCurrency float64 `json:"payment_currency,string"`
-		Timestamp       uint64    `json:"timestamp,string"`
+		OrderCurrency   string `json:"order_currency"`
+		PaymentCurrency string `json:"payment_currency"`
+		Timestamp       uint64 `json:"timestamp,string"`
 	} `json:"data"`
 	Status string `json:"status"`
 }

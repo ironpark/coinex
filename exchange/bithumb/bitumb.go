@@ -5,7 +5,7 @@ import (
 	"io/ioutil"
 	"encoding/json"
 	"strings"
-	"github.com/iris-contrib/errors"
+	"errors"
 )
 
 type EX_Bitumb struct {

@@ -10,7 +10,11 @@ The following exchanges will be supported.
 3. Coinone
 4. Bittrex
 
+## donation
 My Ethereum Wallet :
 0x7EA84eFF0f9D3bd2EaD6Db190A4387B71ac42b44
 
-
+## API
+https://www.bithumb.com/u1/US127
+https://poloniex.com/support/api/
+http://doc.coinone.co.kr
