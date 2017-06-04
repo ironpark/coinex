@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"strings"
 	"errors"
+	"fmt"
+	"regexp"
 )
 
 type EX_Bitumb struct {
@@ -18,14 +20,19 @@ func NewEXBitumb() (*EX_Bitumb) {
 	return c
 }
 
-func (ex *EX_Bitumb)GetTicker(currency string) (JsonTickerData,error) {
+func (ex *EX_Bitumb)GetTicker() (map[string]JsonTickerData,error) {
 	var err error = nil
-	resp := ex.callPublicApi("ticker/"+currency)
+	resp := ex.callPublicApi("ticker/ALL")
+
+	var re= regexp.MustCompile(`,"date".*"}`)
+	s := re.ReplaceAllString(string(resp), "}")
+	resp = []byte(s)
 	ticker := JsonTicker{}
 	if resp != nil {
 		err = json.Unmarshal(resp, &ticker)
-		if err != nil{
-			return JsonTickerData{},err
+		if err != nil {
+			fmt.Println(string(resp))
+			return ticker.Data, err
 		}
 	} else {
 		errors.New("Fail Call Api")
@@ -33,10 +40,10 @@ func (ex *EX_Bitumb)GetTicker(currency string) (JsonTickerData,error) {
 
 	err = ex.getError(ticker.Status)
 	if err != nil {
-		return JsonTickerData{},err
+		return ticker.Data, err
 	}
 
-	return ticker.Data,nil
+	return ticker.Data, nil
 }
 
 func (ex *EX_Bitumb) GetTransactions(currency string) ([]JsonRecentTransactionData,error) {

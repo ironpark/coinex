@@ -6,6 +6,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"time"
+	"strconv"
+	"crypto/hmac"
+	"crypto/sha512"
+	"encoding/hex"
+	"net/url"
 )
 
 //JSON DataStruct
@@ -28,35 +34,118 @@ func NewEXPoloniex() (*EX_Poloniex) {
 		updateCallback:nil,
 		Prices:map[string]float64{},
 	}
-
 	return c
 }
-
-func (ex *EX_Poloniex)GetTicker() (JsonTicker,error) {
+func (ex *EX_Poloniex)SetApiKey(key,keySecret string) {
+	ex.apiKey = key
+	ex.apiKeySecret = keySecret
+}
+//public apis
+func (ex *EX_Poloniex)GetTicker() ( map[string]JsonTickerData,error) {
+	var jsonTicker map[string]JsonTickerData
 	var err error = nil
 	resp := ex.callPublicApi("returnTicker")
-	ticker := JsonTicker{}
 	if resp != nil {
-		err = json.Unmarshal(resp, &ticker)
+		err = json.Unmarshal(resp, &jsonTicker)
 		if err != nil{
-			return JsonTicker{},err
+			return jsonTicker,err
 		}
 	} else {
 		errors.New("Fail Call Api")
 	}
-	return ticker, nil
+	return jsonTicker, nil
+}
+
+func (ex *EX_Poloniex)GetChartData(coin_name string,start,end,period uint64)(ChartData,error)  {
+	var err error = nil
+
+	command := "returnChartData"
+	param :=command + "&currencyPair=" + coin_name +
+		"&start=" + strconv.FormatUint(start,10) +
+		"&end=" + strconv.FormatUint(end,10) +
+		"&period=" + strconv.FormatUint(period,10)
+
+	resp := ex.callPublicApi(param)
+	chartData := ChartData{}
+	if resp != nil {
+		err = json.Unmarshal(resp, &chartData)
+		if err != nil{
+			return ChartData{},err
+		}
+	} else {
+		errors.New("Fail Call Api")
+	}
+	return chartData, nil
+}
+//private(tradingApi) apis
+//https://poloniex.com/tradingApi
+
+func (ex *EX_Poloniex)GetMyBalances()(map[string]float64,error)  {
+	var balances_json map[string]json.Number
+	var balances map[string]float64 = make(map[string]float64)
+
+	a := ex.callPrivateApi("returnBalances",nil)
+	json.Unmarshal(a,&balances_json)
+
+	for k, v := range balances_json {
+		v_float ,_ := v.Float64()
+		if v_float != 0{
+			balances[k]=v_float
+		}
+	}
+	return  balances,nil
+}
+
+func  (ex *EX_Poloniex) callPrivateApi(command string,parameters map[string]string) ([]byte) {
+	client := http.Client{}
+
+	form := url.Values{}
+	form.Add("command", command)
+	for key, value := range parameters {
+		form.Add(key, value)
+	}
+
+	form.Add("nonce", strconv.FormatInt(time.Now().UnixNano(), 10))
+	body := form.Encode()
+	req, err := http.NewRequest("POST", "https://poloniex.com/tradingApi", strings.NewReader(body))
+	if err != nil {
+		return nil
+	}
+	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Add("Key", ex.apiKey)
+	mac := hmac.New(sha512.New, []byte(ex.apiKeySecret))
+	mac.Write([]byte(body))
+	signature := hex.EncodeToString(mac.Sum(nil))
+
+	req.Header.Add("Sign", signature)
+	resp, err := client.Do(req)
+
+	if err != nil {
+		return nil
+	}
+	contents, err := ioutil.ReadAll(resp.Body)
+	if err == nil {
+		//sometimes resp in "\\"
+		contents = []byte(strings.Replace(string(contents), "\\", "", -1))
+		return contents
+	}
+	return nil
 }
 
 func  (ex *EX_Poloniex) callPublicApi(command string) ([]byte) {
-	response, err := http.Get("https://poloniex.com/public?command=" + command)
+	client := http.Client{}
+	client.Timeout = time.Second * 1000
+
+	response, err := client.Get("https://poloniex.com/public?command=" + command)
 	if err != nil {
 		return nil
 	}
 	contents, err := ioutil.ReadAll(response.Body)
 	if err == nil {
 		//sometimes resp in "\\"
-		contents = []byte(strings.Replace(string(contents), "\\", "", -1));
+		contents = []byte(strings.Replace(string(contents), "\\", "", -1))
 		return contents
 	}
 	return nil
 }
+
