@@ -7,13 +7,12 @@ import (
 )
 
 
-func LoadAllDataPoloniex(name string) error{
+func LoadAllDataPoloniex(name string) (poloniex.ChartData,error){
 	ex := poloniex.NewEXPoloniex()
 	resp,err:=ex.GetChartData(name,1451606400,uint64(time.Now().UTC().Unix()),300)
 	if err != nil {
 		fmt.Println(err)
-		return err
+		return nil,err
 	}
-	fmt.Println("CNT",len(resp))
-	return nil
+	return resp,nil
 }
