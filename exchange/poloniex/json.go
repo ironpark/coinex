@@ -1,5 +1,6 @@
 package poloniex
 
+
 type JsonTickerData struct {
 	BaseVolume    string `json:"baseVolume"`
 	High24hr      string `json:"high24hr"`
@@ -14,7 +15,7 @@ type JsonTickerData struct {
 }
 
 type ChartData []struct {
-	Date int `json:"date"`
+	Date int64 `json:"date"`
 	High float64 `json:"high"`
 	Low float64 `json:"low"`
 	Open float64 `json:"open"`
@@ -22,4 +23,14 @@ type ChartData []struct {
 	Volume float64 `json:"volume"`
 	QuoteVolume float64 `json:"quoteVolume"`
 	WeightedAverage float64 `json:"weightedAverage"`
+}
+
+type TradeData []struct {
+	GlobalTradeID int     `json:"globalTradeID"`
+	TradeID       int     `json:"tradeID"`
+	Date          string  `json:"date"`
+	Type          string  `json:"type"`
+	Rate          float64 `json:"rate,string"`
+	Amount        float64 `json:"amount,string"`
+	Total         float64 `json:"total,string"`
 }

@@ -12,6 +12,7 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"net/url"
+	//"fmt"
 )
 
 //JSON DataStruct
@@ -56,13 +57,13 @@ func (ex *EX_Poloniex)GetTicker() ( map[string]JsonTickerData,error) {
 	return jsonTicker, nil
 }
 
-func (ex *EX_Poloniex)GetChartData(coin_name string,start,end,period uint64)(ChartData,error)  {
+func (ex *EX_Poloniex)GetChartData(coin_name string,start,end time.Time,period uint64)(ChartData,error)  {
 	var err error = nil
 
 	command := "returnChartData"
 	param :=command + "&currencyPair=" + coin_name +
-		"&start=" + strconv.FormatUint(start,10) +
-		"&end=" + strconv.FormatUint(end,10) +
+		"&start=" + strconv.FormatUint(uint64(start.UTC().Unix()),10) +
+		"&end=" + strconv.FormatUint(uint64(end.UTC().Unix()),10) +
 		"&period=" + strconv.FormatUint(period,10)
 
 	resp := ex.callPublicApi(param)
@@ -76,6 +77,29 @@ func (ex *EX_Poloniex)GetChartData(coin_name string,start,end,period uint64)(Cha
 		errors.New("Fail Call Api")
 	}
 	return chartData, nil
+}
+
+func (ex *EX_Poloniex)GetTradeHistory(coin_name string,start,end time.Time)(TradeData,error){
+//: https://poloniex.com/public?command=returnTradeHistory&currencyPair=BTC_NXT&start=1410158341&end=1410499372
+	var err error = nil
+
+	command := "returnTradeHistory"
+	param :=command + "&currencyPair=" + coin_name +
+		"&start=" + strconv.FormatUint(uint64(start.UTC().Unix()),10) +
+		"&end=" + strconv.FormatUint(uint64(end.UTC().Unix()),10)
+
+	resp := ex.callPublicApi(param)
+	tradeData := TradeData{}
+	if resp != nil {
+		//fmt.Println(string(resp))
+		err = json.Unmarshal(resp, &tradeData)
+		if err != nil{
+			return TradeData{},err
+		}
+	} else {
+		errors.New("Fail Call Api")
+	}
+	return tradeData, nil
 }
 //private(tradingApi) apis
 //https://poloniex.com/tradingApi
