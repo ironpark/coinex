@@ -91,7 +91,7 @@ func (ex *EX_Poloniex)GetTradeHistory(coin_name string,start,end time.Time)(Trad
 	resp := ex.callPublicApi(param)
 	tradeData := TradeData{}
 	if resp != nil {
-		//fmt.Println(string(resp))
+
 		err = json.Unmarshal(resp, &tradeData)
 		if err != nil{
 			return TradeData{},err
