@@ -6,9 +6,10 @@ import (
 	"github.com/influxdata/influxdb/client/v2"
 	"time"
 	"log"
+	"encoding/json"
 )
 //JSON DataStruct
-type Simulater struct {
+type SimulaterDB struct {
 	addr string
 	username string
 	password string
@@ -16,8 +17,8 @@ type Simulater struct {
 	dbClient client.Client
 }
 
-func NewSimulater(addr,username,password,dbname string) (*Simulater,error) {
-	s := &Simulater{
+func NewSimulater(addr,username,password,dbname string) (*SimulaterDB,error) {
+	s := &SimulaterDB{
 		addr: addr,
 		username:username,
 		password:password,
@@ -37,7 +38,7 @@ func NewSimulater(addr,username,password,dbname string) (*Simulater,error) {
 	return s,nil
 }
 // queryDB convenience function to query the database
-func (db *Simulater) queryDB(cmd string) (res []client.Result, err error) {
+func (db *SimulaterDB) queryDB(cmd string) (res []client.Result, err error) {
 	q := client.Query{
 		Command:  cmd,
 		Database: db.dbname,
@@ -53,7 +54,7 @@ func (db *Simulater) queryDB(cmd string) (res []client.Result, err error) {
 	return res, nil
 }
 
-func (db *Simulater)insertTradeData(name string,insertData poloniex.TradeData) error{
+func (db *SimulaterDB)insertTradeData(name string,insertData poloniex.TradeData) error{
 	// Create a new point batch
 	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
 		Database:  db.dbname,
@@ -66,7 +67,6 @@ func (db *Simulater)insertTradeData(name string,insertData poloniex.TradeData) e
 	layout := "2006-01-02 15:04:05"
 	for i := 0; i < len(insertData); i++ {
 		item := insertData[i]
-
 		// Create a point and add to batch
 		tags := map[string]string{"cryptocurrency": name}
 		fields := map[string]interface{}{
@@ -91,7 +91,7 @@ func (db *Simulater)insertTradeData(name string,insertData poloniex.TradeData) e
 	return nil
 }
 
-func (db *Simulater)getTradeHistoryFirstDate(name string)time.Time{
+func (db *SimulaterDB)getTradeHistoryFirstDate(name string)time.Time{
 	q := newQuery().From("TradeData").TAG("cryptocurrency",name).ASC("time").Limit(1).Build()
 	res, err := db.queryDB(q)
 	if err != nil {
@@ -101,30 +101,36 @@ func (db *Simulater)getTradeHistoryFirstDate(name string)time.Time{
 	return t
 }
 
-func (db *Simulater)GetTradeHistory(name string,start,end time.Time,resolution time.Duration) (error){
-	db.getTradeHistoryFirstDate(name)
-	//get first time data
-	//q := fmt.Sprintf("SELECT * FROM %s LIMIT %d", "TradeData",20)
+func (db *SimulaterDB)GetTradeHistory(name string,start,end time.Time,resolution time.Duration) (error){
 
+	q := newQuery().From("TradeData").TAG("cryptocurrency",name).ASC("time")
+	query := q.Select("MIN(Rate)","MAX(Rate)","FIRST(Rate)","LAST(Rate)").GroupByTime("1m").TIME(start,end).Build()
+	fmt.Println(query)
+	res, err := db.queryDB(query)
+	if err != nil {
+		log.Fatal(err)
+	}
+	result := res[0].Series[0].Values
+	for i, row := range result {
+		if row == nil {
+			continue
+		}
+		t, err := time.Parse(time.RFC3339, row[0].(string))
+		if err != nil {
+			log.Fatal(err)
+		}
+		if row[1] == nil {continue}
+		min ,_:= row[1].(json.Number).Float64()
+		max ,_:= row[2].(json.Number).Float64()
+		first ,_:= row[3].(json.Number).Float64()
+		last ,_:= row[4].(json.Number).Float64()
+		log.Printf("[%2d] %s min %.8f max %.8f open %.8f close %.8f\n", i, t.Format(time.Stamp),min,max,first,last)
+	}
 
-	//q = fmt.Sprintf("SELECT * FROM %s LIMIT %d", "TradeData", 20)
-	//res, err = db.queryDB( q)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//
-	//for i, row := range res[0].Series[0].Values {
-	//	t, err := time.Parse(time.RFC3339, row[0].(string))
-	//	if err != nil {
-	//		log.Fatal(err)
-	//	}
-	//	val := row[1].(string)
-	//	log.Printf("[%2d] %s: %s\n", i, t.Format(time.Stamp), val)
-	//}
 	return nil
 }
 
-func (db *Simulater)UpdateTradeHistory(name string) (error){
+func (db *SimulaterDB)UpdateTradeHistory(name string) (error){
 	//Get Trading History
 	pol := poloniex.NewEXPoloniex()
 	start := time.Now()
@@ -160,8 +166,9 @@ func (db *Simulater)UpdateTradeHistory(name string) (error){
 		}
 
 
-		fmt.Println("insert ",len(trade_data),"rows")
+
 		final = trade_data[len(trade_data)-1]
+		fmt.Println("insert ",len(trade_data),"rows",final.Date)
 		if len(trade_data) < 50000{
 			fmt.Println("load data complete : ",count)
 			break

@@ -37,6 +37,7 @@ func NewEXPoloniex() (*EX_Poloniex) {
 	}
 	return c
 }
+
 func (ex *EX_Poloniex)SetApiKey(key,keySecret string) {
 	ex.apiKey = key
 	ex.apiKeySecret = keySecret

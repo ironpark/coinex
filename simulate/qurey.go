@@ -49,13 +49,13 @@ func (query *queryBuilder)TIME(start,end time.Time) *queryBuilder {
 	layout := "2006-01-02 15:04:05"
 	start_str := start.Format(layout)
 	end_str := end.Format(layout)
-	q := fmt.Sprintf("time <= '%s' AND time >= '%s'",start_str,end_str)
+	q := fmt.Sprintf("time <= '%s' AND time >= '%s'",end_str,start_str)
 	query.p_WHERE = append(query.p_WHERE ,q)
 	return query
 }
 //GROUP BY
 func (query *queryBuilder)GroupByTime(filed string) *queryBuilder {
-	query.p_ORDER_BY = "time("+filed+")"
+	query.p_GROUP_BY = "time("+filed+")"
 	return query
 }
 //GROUP BY time(12m)
@@ -104,12 +104,14 @@ func (query *queryBuilder)Build() string{
 		for i:=0;i< len(query.p_WHERE);i++  {
 			final_query += query.p_WHERE[i]
 			if i+1 != len(query.p_WHERE) {
-				final_query += "AND "
+				final_query += " AND "
+			}else{
+				final_query += " "
 			}
 		}
 	}
 	if query.p_GROUP_BY != "" {
-		final_query += "GROUP BY " + query.p_ORDER_BY + " "
+		final_query += "GROUP BY " + query.p_GROUP_BY + " "
 	}
 	//ORDER BY
 	if query.p_ORDER_BY != "" {
