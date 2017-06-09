@@ -10,6 +10,8 @@ The following exchanges will be supported.
 3. Coinone
 4. Bittrex
 
+![img](http://i.imgur.com/lNP9hgc.png)
+
 ## Dependencies  
  - github.com/influxdata/influxdb/client/v2
  

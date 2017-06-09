@@ -1,6 +1,5 @@
 package poloniex
 
-
 type JsonTickerData struct {
 	BaseVolume    string `json:"baseVolume"`
 	High24hr      string `json:"high24hr"`

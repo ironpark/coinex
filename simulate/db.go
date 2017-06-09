@@ -8,7 +8,7 @@ import (
 	"log"
 	"encoding/json"
 )
-//JSON DataStruct
+
 type SimulaterDB struct {
 	addr string
 	username string
@@ -17,7 +17,7 @@ type SimulaterDB struct {
 	dbClient client.Client
 }
 
-func NewSimulater(addr,username,password,dbname string) (*SimulaterDB,error) {
+func NewSimulaterDB(addr,username,password,dbname string) (*SimulaterDB,error) {
 	s := &SimulaterDB{
 		addr: addr,
 		username:username,
@@ -101,47 +101,131 @@ func (db *SimulaterDB)getTradeHistoryFirstDate(name string)time.Time{
 	return t
 }
 
-func (db *SimulaterDB)GetTradeHistory(name string,start,end time.Time,resolution time.Duration) (error){
-
-	q := newQuery().From("TradeData").TAG("cryptocurrency",name).ASC("time")
-	query := q.Select("MIN(Rate)","MAX(Rate)","FIRST(Rate)","LAST(Rate)").GroupByTime("1m").TIME(start,end).Build()
-	fmt.Println(query)
-	res, err := db.queryDB(query)
+func (db *SimulaterDB)getTradeHistoryLastDate(name string)time.Time{
+	q := newQuery().From("TradeData").TAG("cryptocurrency",name).DESC("time").Limit(1).Build()
+	res, err := db.queryDB(q)
 	if err != nil {
 		log.Fatal(err)
 	}
+	t, _ := time.Parse(time.RFC3339,res[0].Series[0].Values[0][0].(string))
+	return t
+}
+
+func (db *SimulaterDB)getHistoryCount(name string) int64{
+	q := newQuery().Select("count(TradeID)").From("TradeData").TAG("cryptocurrency",name).Build()
+	res, err := db.queryDB(q)
+	if err != nil {
+		return 0
+	}
+	if len(res[0].Series) == 0{
+		return 0
+	}
+	if len(res[0].Series[0].Values) == 0{
+		return 0
+	}
+	if len(res[0].Series[0].Values[0]) == 0{
+		return 0
+	}
+
+	count,_ := res[0].Series[0].Values[0][1].(json.Number).Int64()
+	return count
+}
+
+func (db *SimulaterDB)GetTradeHistory(name string,start,end time.Time,limit int64,resolution time.Duration) (map[string][]float64,error) {
+
+	q := newQuery().From("TradeData").TAG("cryptocurrency", name).ASC("time").Limit(limit)
+	q.Select(
+		"MIN(Rate)",       // row
+		"MAX(Rate)"   ,            // high
+		"FIRST(Rate)" ,            // first(open)
+		"LAST(Rate)"  ,            // last (close)
+		"SUM(Total)"  ,            // volume
+		"MEAN(Rate)"  ,            // Average
+		"SUM(Total)/SUM(Amount)",  // weighted Average
+		"STDDEV(Rate)",            // stddev
+		"SPREAD(Rate)",            // diff between MIN MAX
+	).GroupByTime("1h").TIME(start, end).Build()
+	fmt.Println(q.Build())
+	res, err := db.queryDB(q.Build())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+
 	result := res[0].Series[0].Values
+	count := len(result)
+	var output map[string][]float64 = make(map[string][]float64)
+	output["low"]     = make([]float64, count)
+	output["high"]    = make([]float64, count)
+	output["first"]   = make([]float64, count)
+	output["last"]    = make([]float64, count)
+	output["volume"]  = make([]float64, count)
+	output["avg"]     = make([]float64, count)
+	output["avg-w"]   = make([]float64, count)
+	output["stddev"]  = make([]float64, count)
+	output["spread"]  = make([]float64, count)
+
 	for i, row := range result {
 		if row == nil {
 			continue
 		}
+
 		t, err := time.Parse(time.RFC3339, row[0].(string))
 		if err != nil {
 			log.Fatal(err)
 		}
-		if row[1] == nil {continue}
-		min ,_:= row[1].(json.Number).Float64()
-		max ,_:= row[2].(json.Number).Float64()
-		first ,_:= row[3].(json.Number).Float64()
-		last ,_:= row[4].(json.Number).Float64()
-		log.Printf("[%2d] %s min %.8f max %.8f open %.8f close %.8f\n", i, t.Format(time.Stamp),min,max,first,last)
+		if row[1] == nil {
+			continue
+		}
+
+		MIN, _ := row[1].(json.Number).Float64()
+		MAX, _ := row[2].(json.Number).Float64()
+		FIRST, _ := row[3].(json.Number).Float64()
+		LAST, _ := row[4].(json.Number).Float64()
+		VOLUME, _ := row[5].(json.Number).Float64()
+		AVG, _ := row[6].(json.Number).Float64()
+		AVGW, _ := row[7].(json.Number).Float64()
+
+		var STDDEV,SPREAD float64
+		if( row[8] != nil) {
+			STDDEV, _ = row[8].(json.Number).Float64()
+		}else{
+			STDDEV = 0
+		}
+
+		if( row[9] != nil) {
+			SPREAD, _ = row[9].(json.Number).Float64()
+		}else{
+			SPREAD = 0
+		}
+		output["spread"][i] = SPREAD
+		output["stddev"][i] = STDDEV
+
+		output["low"][i] = MIN
+		output["high"][i] = MAX
+		output["first"][i] = FIRST
+		output["last"][i] = LAST
+		output["volume"][i] = VOLUME
+		output["avg"][i] = AVG
+		output["avg-w"][i] = AVGW
+
+		log.Printf("%s min %.8f max %.8f open %.8f close %.8f  %.8f  %.8f\n", t.Format(time.RFC3339), MIN, MAX, FIRST, LAST, AVG, AVGW)
 	}
 
-	return nil
+	return output,nil
 }
-
-func (db *SimulaterDB)UpdateTradeHistory(name string) (error){
-	//Get Trading History
+func (db *SimulaterDB)insetAllTradeHistory(name string,start time.Time) (error){
 	pol := poloniex.NewEXPoloniex()
-	start := time.Now()
-
 	tradeHistorys, err := pol.GetTradeHistory(name, start.Add(-time.Hour*24*365), start)
 	if err != nil {
 		fmt.Println(err)
 		return err
 	}
+	if(len(tradeHistorys) <= 0){
+		return nil
+	}
 	//insert first data
-	db.insertTradeData(name,tradeHistorys)
+	db.insertTradeData(name, tradeHistorys)
 
 	final := tradeHistorys[len(tradeHistorys)-1]
 	count := 0
@@ -149,30 +233,46 @@ func (db *SimulaterDB)UpdateTradeHistory(name string) (error){
 
 	for {
 		start, _ = time.Parse(layout, final.Date)
-
 		trade_data, err := pol.GetTradeHistory(name, start.Add(-time.Hour*24*365), start)
-		if err != nil{
+		if err != nil {
 			break;
 		}
-		if len(trade_data) <= 0{
+		if len(trade_data) <= 0 {
 			break;
 		}
 		for i := 0; i < len(trade_data); i++ {
 			if final.TradeID == trade_data[i].TradeID {
-				db.insertTradeData(name,trade_data[i+1:])
-				count+=len(trade_data)
+				db.insertTradeData(name, trade_data[i+1:])
+				count += len(trade_data)
 				break
 			}
 		}
 
-
-
 		final = trade_data[len(trade_data)-1]
-		fmt.Println("insert ",len(trade_data),"rows",final.Date)
-		if len(trade_data) < 50000{
-			fmt.Println("load data complete : ",count)
+		fmt.Println("insert ", len(trade_data), "rows", final.Date)
+		if len(trade_data) < 50000 {
+			fmt.Println("load data complete : ", count)
 			break
 		}
+	}
+	return nil
+}
+func (db *SimulaterDB)UpdateTradeHistory(name string) (error) {
+	//Get Trading History
+	pol := poloniex.NewEXPoloniex()
+	if db.getHistoryCount(name) == 0 {
+		db.insetAllTradeHistory(name, time.Now())
+	} else {
+		//first Update
+		last := db.getTradeHistoryLastDate(name)
+		tradeHistorys, err := pol.GetTradeHistory(name, last, time.Now())
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+		db.insertTradeData(name, tradeHistorys)
+		first := db.getTradeHistoryLastDate(name)
+		db.insetAllTradeHistory(name, first)
 	}
 	return nil
 }

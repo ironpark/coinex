@@ -74,6 +74,8 @@ func (query *queryBuilder)Limit(limit int64) *queryBuilder {
 	query.p_LIMIT = limit
 	return query
 }
+
+//linear
 func (query *queryBuilder)Build() string{
 	final_query := ""
 	//SELECT
@@ -93,6 +95,7 @@ func (query *queryBuilder)Build() string{
 	}
 	//FROM
 	final_query += " FROM " + query.p_FROM +" "
+
 	//WHERE
 	switch len(query.p_WHERE) {
 	case 0:
@@ -110,13 +113,16 @@ func (query *queryBuilder)Build() string{
 			}
 		}
 	}
+
 	if query.p_GROUP_BY != "" {
 		final_query += "GROUP BY " + query.p_GROUP_BY + " "
 	}
+	final_query += "Fill(linear) "
 	//ORDER BY
 	if query.p_ORDER_BY != "" {
 		final_query += "ORDER BY " + query.p_ORDER_BY + " "
 	}
+
 	//LIMIT
 	if query.p_LIMIT != -1 {
 		q := fmt.Sprintf("LIMIT %d", query.p_LIMIT)
