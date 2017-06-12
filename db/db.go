@@ -17,7 +17,35 @@ type CoinDB struct {
 	dbClient client.Client
 }
 
+type DefaultConfig struct {
+	Addr string
+	Username string
+	Password string
+	DBname string
+}
+
+var (
+	Config DefaultConfig
+)
+
+func init(){
+	Config.Addr = "http://localhost:8086"
+	Config.DBname = "coinex"
+	Config.Username = ""
+	Config.Password = ""
+}
+
+func SetUser(name,pass string)  {
+	Config.Username = name
+	Config.Password = pass
+}
+
+func Default() (*CoinDB,error) {
+	return NewCoinDB(Config.Addr,Config.Username,Config.Password,Config.DBname)
+}
+
 func NewCoinDB(addr,username,password,dbname string) (*CoinDB,error) {
+
 	s := &CoinDB{
 		addr: addr,
 		username:username,
@@ -53,47 +81,35 @@ func (db *CoinDB) queryDB(cmd string) (res []client.Result, err error) {
 	}
 	return res, nil
 }
-//
-//func (db *CoinDB)InsertTradeData(name ,exchange string,insertData []coinex.TradeData) error{
-//	// Create a new point batch
-//	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
-//		Database:  db.dbname,
-//		Precision: "s",
-//	})
-//
-//	if err != nil {
-//		return err
-//	}
-//
-//	for i := 0; i < len(insertData); i++ {
-//		item := insertData[i]
-//		// Create a point and add to batch
-//		tags := map[string]string{
-//			"cryptocurrency": name,
-//			"ex": exchange,
-//			"type": item.Type,
-//		}
-//
-//		fields := map[string]interface{}{
-//			"TradeID": item.ID,
-//			"Amount":  item.Amount,
-//			"Rate":    item.Price,
-//			"Total":   item.Total,
-//		}
-//
-//
-//		pt, err := client.NewPoint("TradeData", tags, fields, item.Date)
-//		if err != nil {
-//			log.Fatal(err)
-//		}
-//		bp.AddPoint(pt)
-//	}
-//	// Write the batch
-//	if err := db.dbClient.Write(bp); err != nil {
-//		log.Fatal(err)
-//	}
-//	return nil
-//}
+
+
+type Tags map[string]string
+type Fields map[string]interface{}
+
+func (db *CoinDB)NewBatchPoints()(client.BatchPoints, error){
+	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
+		Database:  db.dbname,
+		Precision: "s",
+	})
+	return bp, err
+}
+
+func (db *CoinDB) NewPoint(tags Tags,fields Fields,date time.Time) (*client.Point,error){
+	pt, err := client.NewPoint(
+		"TradeData",
+		tags,
+		fields,
+		date)
+	return pt, err
+}
+
+func (db *CoinDB) Write(bp client.BatchPoints) (error) {
+	if err := db.dbClient.Write(bp); err != nil {
+		return err
+	}
+	return nil
+}
+
 
 func (db *CoinDB)FirstTradeHistory(name string)time.Time{
 	q := newQuery().From("TradeData").TAG("cryptocurrency",name).ASC("time").Limit(1).Build()

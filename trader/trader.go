@@ -43,6 +43,7 @@ type Trader interface {
 	SetTradeCallback(func(trader Trader,data TradeData))
 	Pair() string
 	Call(Trader,TradeData)
+	Exchange() string
 }
 
 //balance

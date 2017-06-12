@@ -29,6 +29,7 @@ type EX_Poloniex struct {
 	callback func(trader.Trader,trader.TradeData)
 	db *db.CoinDB
 	crypto string
+	exchange string
 }
 
 func NewTrader(key,secret string,pair string) *EX_Poloniex {
@@ -37,13 +38,16 @@ func NewTrader(key,secret string,pair string) *EX_Poloniex {
 		apiSecret:secret,
 		httpClient:&http.Client{},
 		crypto:pair,
+		exchange:"poloniex",
 	}
+	dbClient,_ := db.Default()
+	c.db = dbClient
 	return c
 }
 
 func (c *EX_Poloniex) TickerData(resolution string) trader.TikerData{
 	before := time.Now().Add(-time.Hour*24*30)
-	data,_ := c.db.TradeHistory("poloniex",c.crypto,before,time.Now(),DefaultLimit,resolution)
+	data,_ := c.db.TradeHistory(c.crypto,"poloniex",before,time.Now(),DefaultLimit,resolution)
 	return data
 }
 
@@ -103,6 +107,10 @@ func (c *EX_Poloniex) Pair() string{
 	return c.crypto
 }
 
+func (c *EX_Poloniex) Exchange() string{
+	return c.exchange
+}
+
 //Base Code
 func (ex *EX_Poloniex) do(ressource string, payload string, authNeeded bool) (response []byte, err error) {
 	connectTimer := time.NewTimer(60 * time.Second)
@@ -112,10 +120,10 @@ func (ex *EX_Poloniex) do(ressource string, payload string, authNeeded bool) (re
 
 	if authNeeded {
 		method = "POST"
-		rawurl = "https://poloniex.com/tradingApi/"
+		rawurl = "https://poloniex.com/tradingApi" + ressource
 	}else{
 		method = "GET"
-		rawurl = "http://poloniex.com/public/"
+		rawurl = "http://poloniex.com/public" + ressource
 	}
 
 	req, err := http.NewRequest(method, rawurl, strings.NewReader(payload))
@@ -123,8 +131,9 @@ func (ex *EX_Poloniex) do(ressource string, payload string, authNeeded bool) (re
 		return
 	}
 	if method == "POST" {
-		req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Add("Content-Type", "application/json;charset=utf-8")
 	}
+	req.Header.Add("Accept", "application/json")
 
 	if authNeeded {
 		if len(ex.apiKey) == 0 || len(ex.apiSecret) == 0 {
@@ -148,7 +157,6 @@ func (ex *EX_Poloniex) do(ressource string, payload string, authNeeded bool) (re
 
 	defer resp.Body.Close()
 	response, err = ioutil.ReadAll(resp.Body)
-
 	if err != nil {
 		return response, err
 	}
@@ -179,6 +187,44 @@ func (ex *EX_Poloniex) doTimeoutRequest(timer *time.Timer, req *http.Request) (*
 	}
 }
 
+func (ex *EX_Poloniex)TradeHistory(pair string,start time.Time,end time.Time) []trader.TradeData{
+	ressource := fmt.Sprintf("?command=returnTradeHistory&currencyPair=%s&start=%d&end=%d",pair,start.Unix(),end.Unix())
+	result ,err := ex.do(ressource,"",false)
+	if err != nil{
+		return nil
+	}
+	type trade map[string] interface{}
+	trades := []trade{}
+
+	err = json.Unmarshal(result, &trades)
+	if err != nil{
+		return nil
+	}
+
+	data := make([]trader.TradeData, len(trades))
+
+	for i,x := range trades{
+		TradeID := x["tradeID"].(float64)
+		Amount,_ := strconv.ParseFloat(x["amount"].(string),64)
+		Rate,_ := strconv.ParseFloat(x["rate"].(string),64)
+		Total,_ :=strconv.ParseFloat( x["total"].(string),64)
+		Type :=	x["type"].(string)
+
+		data[i].ID = int64(TradeID)
+		data[i].Amount = Amount
+		data[i].Price = Rate
+		data[i].Total = Total
+		data[i].Type = Type
+
+		
+		if err != nil {
+			log.Panic(err)
+		}
+		data[i].Date = Date
+	}
+	return data
+}
+
 func getNewTrade(args []interface{}) []trader.TradeData{
 	datas := []trader.TradeData{}
 	for x := range args {
@@ -207,6 +253,11 @@ func getNewTrade(args []interface{}) []trader.TradeData{
 
 func PushApi(pair []string,callback func(pair string,trades []trader.TradeData)){
 	ws, err := turnpike.NewWebsocketClient(turnpike.JSON, "wss://api.poloniex.com", &tls.Config{}, net.Dial)
+	if ws == nil{
+		log.Panic(err)
+		return
+	}
+
 	ws.ReceiveTimeout = time.Second*60*100
 	if err != nil {
 		log.Fatal(err)
@@ -217,13 +268,17 @@ func PushApi(pair []string,callback func(pair string,trades []trader.TradeData))
 	}
 
 	ws.ReceiveDone = make(chan bool)
-	for _,p := range pair {
-		ws.Subscribe(p, nil, func(args []interface{}, kwargs map[string]interface{}) {
+	for x := range pair {
+		currency := pair[x]
+		ws.Subscribe(currency, nil, func(args []interface{}, kwargs map[string]interface{}) {
 			if args == nil || len(args) == 0 {
 				return
 			}
 			trades := getNewTrade(args)
-			callback(p,trades)
+			if len(trades) == 0 {
+				return
+			}
+			callback(currency,trades)
 		})
 	}
 	log.Println("listening for meta events")
