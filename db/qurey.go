@@ -1,4 +1,4 @@
-package simulate
+package db
 
 import (
 	"time"
@@ -25,6 +25,7 @@ func newQuery() (*queryBuilder) {
 	}
 	return c
 }
+
 func (query *queryBuilder)Select(field... string) *queryBuilder {
 	query.p_SELECT_FIELD = append(field)
 	return query
