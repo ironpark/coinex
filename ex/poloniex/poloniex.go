@@ -209,7 +209,7 @@ func (ex *EX_Poloniex)TradeHistory(pair string,start time.Time,end time.Time) []
 		Rate,_ := strconv.ParseFloat(x["rate"].(string),64)
 		Total,_ :=strconv.ParseFloat( x["total"].(string),64)
 		Type :=	x["type"].(string)
-
+		Date, _ := time.Parse("2006-01-02 15:04:05", x["date"].(string))
 		data[i].ID = int64(TradeID)
 		data[i].Amount = Amount
 		data[i].Price = Rate

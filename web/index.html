@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+    body {
+        font: 10px sans-serif;
+    }
+
+    text {
+        fill: #000;
+    }
+
+    button {
+        position: absolute;
+        right: 20px;
+        top: 440px;
+        display: none;
+    }
+
+    path.candle {
+        stroke: #000000;
+    }
+
+    path.candle.body {
+        stroke-width: 0;
+    }
+
+    path.candle.up {
+        fill: #00AA00;
+        stroke: #00AA00;
+    }
+
+    path.candle.down {
+        fill: #FF0000;
+        stroke: #FF0000;
+    }
+
+</style>
+<body>
+<div id="result"></div>
+<button>Update</button>
+<script src="http://d3js.org/d3.v4.min.js"></script>
+<script src="http://techanjs.org/techan.min.js"></script>
+<script>
+
+    var margin = {top: 20, right: 20, bottom: 30, left: 50},
+        width = 960 - margin.left - margin.right,
+        height = 500 - margin.top - margin.bottom;
+
+    var parseDate = d3.timeParse("%d-%b-%y");
+
+    var x = techan.scale.financetime()
+        .range([0, width]);
+
+    var y = d3.scaleLinear()
+        .range([height, 0]);
+
+    var candlestick = techan.plot.candlestick()
+        .xScale(x)
+        .yScale(y);
+
+    var xAxis = d3.axisBottom()
+        .scale(x);
+
+    var yAxis = d3.axisLeft()
+        .scale(y);
+
+    var svg = d3.select("body").append("svg")
+        .attr("width", width + margin.left + margin.right)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+        data =[{
+            date: parseDate("9-Jun-14"),
+            open: 5,
+            high: 10,
+            low: 0,
+            close: +4,
+            volume: +100
+        },{
+            date: parseDate("6-Jun-14"),
+            open: 5,
+            high: 10,
+            low: 0,
+            close: 4,
+            volume: +100
+        },{
+            date: parseDate("5-Jun-14"),
+            open: 5,
+            high: 10,
+            low: 0,
+            close: 4,
+            volume: +100
+        },{
+            date: parseDate("4-Jun-14"),
+            open: 5,
+            high: 40,
+            low: 0,
+            close: 30,
+            volume: +100
+        },{
+            date: parseDate("3-Jun-14"),
+            open: 5,
+            high: 10,
+            low: 0,
+            close: 4,
+            volume: +100
+        },{
+            date: parseDate("2-Jun-14"),
+            open: 5,
+            high: 10,
+            low: 0,
+            close: 4,
+            volume: +100
+        },{
+            date: parseDate("1-Jun-14"),
+            open: 5,
+            high: 10,
+            low: 0,
+            close: 4,
+            volume: +100
+        }];
+        svg.append("g")
+            .attr("class", "candlestick");
+
+        svg.append("g")
+            .attr("class", "x axis")
+            .attr("transform", "translate(0," + height + ")");
+
+        svg.append("g")
+            .attr("class", "y axis")
+            .append("text")
+            .attr("transform", "rotate(-90)")
+            .attr("y", 6)
+            .attr("dy", ".71em")
+            .style("text-anchor", "end")
+            .text("Price ($)");
+
+        // Data to display initially
+        draw(data.slice(0, data.length-20));
+        // Only want this button to be active if the data has loaded
+        draw(data)
+        d3.select("button").on("click", function() { draw(data); }).style("display", "inline");
+
+
+    function draw(data) {
+        x.domain(data.map(candlestick.accessor().d));
+        y.domain(techan.scale.plot.ohlc(data, candlestick.accessor()).domain());
+
+        svg.selectAll("g.candlestick").datum(data).call(candlestick);
+        svg.selectAll("g.x.axis").call(xAxis);
+        svg.selectAll("g.y.axis").call(yAxis);
+    }
+    var source = new EventSource("http://localhost:3000/sse");
+    source.onmessage = function(event) {
+
+        //TO-DO Update Chart
+        document.getElementById("result").innerHTML += event.data + "<br>";
+    };
+</script>

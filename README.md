@@ -47,3 +47,4 @@ Goals for **CoinEX**
 - [bithumb](https://www.bithumb.com/u1/US127)
 - [poloniex](https://poloniex.com/support/api/)
 - [coinone](http://doc.coinone.co.kr)
+- [wss gist code](https://gist.github.com/ismasan/3fb75381cd2deb6bfa9c)

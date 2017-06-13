@@ -6,10 +6,16 @@ import (
 	tr "github.com/ironpark/coinex/trader"
 	"log"
 	"time"
+	"github.com/ironpark/coinex/web"
+	"net/http"
+	"io/ioutil"
+	"runtime"
+	"path"
 )
 
 
 type Manager struct{
+	sse *web.Broker
 	traders map[string]map[string][]tr.Trader
 	db *db.CoinDB
 }
@@ -17,7 +23,8 @@ type Manager struct{
 func NewManager()(*Manager){
 	traders := map[string]map[string][]tr.Trader{}
 	dbClient ,_:= db.Default()
-	return &Manager{traders,dbClient}
+
+	return &Manager{web.NewSSEServer(),traders,dbClient,}
 }
 
 func (ma *Manager) AddTrader(trader tr.Trader)  {
@@ -63,13 +70,36 @@ func (ma *Manager) Start(){
 		}
 	}
 
-	poloniex.PushApi(poloPairs, func(pair string,data []tr.TradeData) {
-		//insert Data
-		ma.insertTradeData(pair,"poloniex",data)
-		for _,trader := range ma.traders["poloniex"][pair]{
-			trader.Call(trader,data[len(data)-1])
+	go func() {
+		poloniex.PushApi(poloPairs, func(pair string, data []tr.TradeData) {
+			//insert Data
+			ma.insertTradeData(pair, "poloniex", data)
+			for _, trader := range ma.traders["poloniex"][pair] {
+				trader.Call(trader, data[len(data)-1])
+			}
+			ma.sse.Notifier <- []byte(pair)
+		})
+	}()
+	//package path
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		panic("No caller information")
+	}
+	dir := path.Dir(filename)
+
+
+	http.HandleFunc("/trade", func(w http.ResponseWriter,req *http.Request) {
+		file, err := ioutil.ReadFile(dir+"/web/index.html")
+		w.Header().Set("Content-Type","text/html; charset=utf-8")
+		w.Write(file)
+
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
 		}
 	})
+	http.HandleFunc("/sse",ma.sse.ServeHTTP)
+
+	http.ListenAndServe("localhost:3000",nil)
 	//bittrex
 
 }
