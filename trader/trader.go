@@ -11,7 +11,7 @@ type TradeData struct {
 	Date time.Time
 }
 
-type TikerData map[string][]float64
+type TikerData map[string]interface{}
 type MyOders map[string]string
 type MyBalances []Balance
 
@@ -53,29 +53,33 @@ func (balance MyBalances) Size() int{
 
 //ticker
 func (ticker TikerData) Low() []float64{
-	return ticker["low"]
+	return ticker["low"].([]float64)
 }
 
 func (ticker TikerData) High()[]float64{
-	return ticker["high"]
+	return ticker["high"].([]float64)
 }
 
 func (ticker TikerData) First()[]float64{
-	return ticker["first"]
+	return ticker["first"].([]float64)
 }
 
 func (ticker TikerData) Last() []float64{
-	return ticker["last"]
+	return ticker["last"].([]float64)
 }
 
 func (ticker TikerData) Volume()[]float64{
-	return ticker["volume"]
+	return ticker["volume"].([]float64)
 }
 
 func (ticker TikerData) Avg()[]float64{
-	return ticker["avg"]
+	return ticker["avg"].([]float64)
 }
 
 func (ticker TikerData) WeightedAvg()[]float64{
-	return ticker["avg-w"]
+	return ticker["avg-w"].([]float64)
+}
+
+func (ticker TikerData) Time()[]int64{
+	return ticker["date"].([]int64)
 }

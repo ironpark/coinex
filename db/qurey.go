@@ -118,7 +118,7 @@ func (query *queryBuilder)Build() string{
 	if query.p_GROUP_BY != "" {
 		final_query += "GROUP BY " + query.p_GROUP_BY + " "
 	}
-	final_query += "Fill(linear) "
+	final_query += "Fill(none) "
 	//ORDER BY
 	if query.p_ORDER_BY != "" {
 		final_query += "ORDER BY " + query.p_ORDER_BY + " "

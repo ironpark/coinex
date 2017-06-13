@@ -1,16 +1,18 @@
 package coinex
 
 import (
-	"github.com/ironpark/coinex/ex/poloniex"
+
 	"github.com/ironpark/coinex/db"
 	tr "github.com/ironpark/coinex/trader"
 	"log"
 	"time"
 	"github.com/ironpark/coinex/web"
+	"github.com/ironpark/coinex/ex/poloniex"
 	"net/http"
 	"io/ioutil"
 	"runtime"
 	"path"
+	"fmt"
 )
 
 
@@ -53,43 +55,67 @@ func (ma *Manager) insertTradeData(pair string,ex string,data []tr.TradeData)  {
 				"Total":   d.Total,
 			}, d.Date)
 		bp.AddPoint(point)
+		//fmt.Println(d.Date)
 	}
-	ma.db.Write(bp)
+	err := ma.db.Write(bp)
+	if(err != nil){
+		log.Fatal(err)
+	}
 }
 
-func (ma *Manager) Start(){
-	//poloniex
-	poloPairs := []string{}
-	p := poloniex.NewTrader("","","")
-	now := time.Now()
-	for pair := range ma.traders["poloniex"]{
-		poloPairs = append(poloPairs,pair)
-		his := p.TradeHistory(pair,now.Add(-time.Hour*24),now)
-		if his != nil{
-			ma.insertTradeData(pair,"poloniex",his)
-		}
-	}
-
+func (ma *Manager) Start(port int64){
+	//for poloniex
 	go func() {
+		poloPairs := []string{}
+		p := poloniex.NewTrader("","","")
+		now := time.Now()
+		log.Println("poloniex trader lists ...")
+		for pair := range ma.traders["poloniex"] {
+			poloPairs = append(poloPairs, pair)
+			his := p.TradeHistory(pair, now.Add(-time.Hour*24), now)
+			if his != nil {
+				ma.insertTradeData(pair, "poloniex", his)
+			}
+		}
+		log.Println("poloniex.PushApi init ...")
 		poloniex.PushApi(poloPairs, func(pair string, data []tr.TradeData) {
 			//insert Data
 			ma.insertTradeData(pair, "poloniex", data)
 			for _, trader := range ma.traders["poloniex"][pair] {
 				trader.Call(trader, data[len(data)-1])
 			}
-			ma.sse.Notifier <- []byte(pair)
+
+			before := time.Now().Add(-time.Hour*24*30)
+			hd,_ := ma.db.TradeHistory("BTC_ETH","poloniex",before,time.Now(),1000,"1m")
+
+			dates   := hd.Time()
+			closes  := hd.Last()
+			opens   := hd.First()
+			highs   := hd.High()
+			lows    := hd.Low()
+			volumes := hd.Volume()
+			//fmt.Println(opens)
+			finaljson := "["
+			for i := range dates {
+				finaljson += fmt.Sprintf(
+					"{\"date\":%d,\"open\":%.9f,\"high\":%.9f,\"low\":%.9f,\"close\":%.9f,\"volume\":%.9f}",
+					dates[i],opens[i],highs[i],lows[i],closes[i],volumes[i])
+				if len(volumes) -1 !=  i {
+					finaljson += ","
+				}
+			}
+			finaljson += "]"
+			//log.Println(finaljson)
+			ma.sse.Notifier <- []byte(finaljson)
 		})
 	}()
-	//package path
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		panic("No caller information")
-	}
-	dir := path.Dir(filename)
+	log.Println("start web server (server send event)")
+	ma.webServerStart(port)
+}
 
-
-	http.HandleFunc("/trade", func(w http.ResponseWriter,req *http.Request) {
-		file, err := ioutil.ReadFile(dir+"/web/index.html")
+func (ma *Manager) webServerStart(port int64){
+	http.HandleFunc("/", func(w http.ResponseWriter,req *http.Request) {
+		file, err := ioutil.ReadFile(packagePath()+"/web/index.html")
 		w.Header().Set("Content-Type","text/html; charset=utf-8")
 		w.Write(file)
 
@@ -97,9 +123,17 @@ func (ma *Manager) Start(){
 			w.WriteHeader(http.StatusNotFound)
 		}
 	})
+
 	http.HandleFunc("/sse",ma.sse.ServeHTTP)
+	http.ListenAndServe("localhost:"+fmt.Sprintf("%d",port),nil)
+}
 
-	http.ListenAndServe("localhost:3000",nil)
-	//bittrex
-
+func packagePath() string{
+	//package path
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		panic("No caller information")
+	}
+	dir := path.Dir(filename)
+	return dir
 }

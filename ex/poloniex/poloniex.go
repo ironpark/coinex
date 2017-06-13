@@ -15,7 +15,7 @@ import (
 	"github.com/ironpark/coinex/trader"
 	"github.com/ironpark/coinex/db"
 	"gopkg.in/jcelliott/turnpike.v2"
-	"crypto/tls"
+	//"crypto/tls"
 	"net"
 	"log"
 )
@@ -47,7 +47,7 @@ func NewTrader(key,secret string,pair string) *EX_Poloniex {
 
 func (c *EX_Poloniex) TickerData(resolution string) trader.TikerData{
 	before := time.Now().Add(-time.Hour*24*30)
-	data,_ := c.db.TradeHistory(c.crypto,"poloniex",before,time.Now(),DefaultLimit,resolution)
+	data,_ := c.db.TradeHistory(c.crypto,"poloniex",before,time.Now().Add(time.Minute*2),DefaultLimit,resolution)
 	return data
 }
 
@@ -221,6 +221,7 @@ func (ex *EX_Poloniex)TradeHistory(pair string,start time.Time,end time.Time) []
 			log.Panic(err)
 		}
 		data[i].Date = Date
+		//fmt.Println(data[i])
 	}
 	return data
 }
@@ -238,6 +239,7 @@ func getNewTrade(args []interface{}) []trader.TradeData{
 			Amount, _ := strconv.ParseFloat(msgData["amount"].(string), 64)
 			Total, _ := strconv.ParseFloat(msgData["total"].(string), 64)
 			Date, _ := time.Parse("2006-01-02 15:04:05", msgData["date"].(string))
+			fmt.Println(msgData["date"].(string))
 			datas = append(datas, trader.TradeData{
 				Type:   Type,
 				ID:     TradeID,
@@ -252,10 +254,20 @@ func getNewTrade(args []interface{}) []trader.TradeData{
 }
 
 func PushApi(pair []string,callback func(pair string,trades []trader.TradeData)){
-	ws, err := turnpike.NewWebsocketClient(turnpike.JSON, "wss://api.poloniex.com", &tls.Config{}, net.Dial)
-	if ws == nil{
-		log.Panic(err)
-		return
+	var ws *turnpike.Client
+	var err error
+	count := 0
+	for ; ; {
+		ws, err = turnpike.NewWebsocketClient(turnpike.JSON, "wss://api.poloniex.com",nil, net.Dial)
+		if ws == nil {
+			count++
+			if count == 5 {
+				log.Fatal(err)
+			}
+			log.Println(err,"retry ...",count)
+			continue
+		}
+		break
 	}
 
 	ws.ReceiveTimeout = time.Second*60*100
@@ -270,6 +282,7 @@ func PushApi(pair []string,callback func(pair string,trades []trader.TradeData))
 	ws.ReceiveDone = make(chan bool)
 	for x := range pair {
 		currency := pair[x]
+		log.Printf("poloniex push api '%s' subcribe\n",currency)
 		ws.Subscribe(currency, nil, func(args []interface{}, kwargs map[string]interface{}) {
 			if args == nil || len(args) == 0 {
 				return

@@ -1,12 +1,11 @@
 package db
 
 import (
-	"fmt"
 	"github.com/influxdata/influxdb/client/v2"
 	"time"
 	"log"
 	"encoding/json"
-
+	"github.com/ironpark/coinex/trader"
 )
 
 type CoinDB struct {
@@ -151,22 +150,22 @@ func (db *CoinDB)getHistoryCount(name string) int64{
 	return count
 }
 
-func (db *CoinDB)TradeHistory(name, exchange string,start,end time.Time,limit int64,resolution string) (map[string][]float64,error) {
+func (db *CoinDB)TradeHistory(name, exchange string,start,end time.Time,limit int64,resolution string) (trader.TikerData,error) {
 
 	q := newQuery().From("TradeData").TAG("cryptocurrency", name).TAG("ex", exchange).ASC("time").Limit(limit)
 	q.Select(
-		"MIN(Rate)",       // row
-		"MAX(Rate)"   ,            // high
-		"FIRST(Rate)" ,            // first(open)
-		"LAST(Rate)"  ,            // last (close)
-		"SUM(Total)"  ,            // volume
-		"MEAN(Rate)"  ,            // Average
-		"SUM(Total)/SUM(Amount)",  // weighted Average
-		"STDDEV(Rate)",            // stddev
-		"SPREAD(Rate)",            // diff between MIN MAX
+		"MIN(\"Rate\")",       // row
+		"MAX(\"Rate\")"   ,            // high
+		"FIRST(\"Rate\")" ,            // first(open)
+		"LAST(\"Rate\")"  ,            // last (close)
+		"SUM(\"Total\")"  ,            // volume
+		"MEAN(\"Rate\")"  ,            // Average
+		"SUM(\"Total\")/SUM(\"Amount\")",  // weighted Average
+		"STDDEV(\"Rate\")",            // stddev
+		"SPREAD(\"Rate\")",            // diff between MIN MAX
 	).GroupByTime(resolution).TIME(start, end).Build()
-	fmt.Println(q.Build())
 	res, err := db.queryDB(q.Build())
+	//fmt.Println(q.Build())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -174,7 +173,7 @@ func (db *CoinDB)TradeHistory(name, exchange string,start,end time.Time,limit in
 
 	result := res[0].Series[0].Values
 	count := len(result)
-	var output map[string][]float64 = make(map[string][]float64)
+	var output map[string]interface{} = make(map[string]interface{})
 	output["low"]     = make([]float64, count)
 	output["high"]    = make([]float64, count)
 	output["first"]   = make([]float64, count)
@@ -184,6 +183,7 @@ func (db *CoinDB)TradeHistory(name, exchange string,start,end time.Time,limit in
 	output["avg-w"]   = make([]float64, count)
 	output["stddev"]  = make([]float64, count)
 	output["spread"]  = make([]float64, count)
+	output["date"]    = make([]int64, count)
 
 	for i, row := range result {
 		if row == nil {
@@ -207,29 +207,29 @@ func (db *CoinDB)TradeHistory(name, exchange string,start,end time.Time,limit in
 		AVGW, _ := row[7].(json.Number).Float64()
 
 		var STDDEV,SPREAD float64
-		if( row[8] != nil) {
+		if row[8] != nil {
 			STDDEV, _ = row[8].(json.Number).Float64()
 		}else{
 			STDDEV = 0
 		}
 
-		if( row[9] != nil) {
+		if row[9] != nil {
 			SPREAD, _ = row[9].(json.Number).Float64()
 		}else{
 			SPREAD = 0
 		}
-		output["spread"][i] = SPREAD
-		output["stddev"][i] = STDDEV
+		output["spread"].([]float64)[i] = SPREAD
+		output["stddev"].([]float64)[i] = STDDEV
 
-		output["low"][i] = MIN
-		output["high"][i] = MAX
-		output["first"][i] = FIRST
-		output["last"][i] = LAST
-		output["volume"][i] = VOLUME
-		output["avg"][i] = AVG
-		output["avg-w"][i] = AVGW
-
-		log.Printf("%s min %.8f max %.8f open %.8f close %.8f avg %.8f avg-w %.8f volume %.4f %f\n", t.Format(time.RFC3339), MIN, MAX, FIRST, LAST, AVG, AVGW,VOLUME,STDDEV)
+		output["low"].([]float64)[i] = MIN
+		output["high"].([]float64)[i] = MAX
+		output["first"].([]float64)[i] = FIRST
+		output["last"].([]float64)[i] = LAST
+		output["volume"].([]float64)[i] = VOLUME
+		output["avg"].([]float64)[i] = AVG
+		output["avg-w"].([]float64)[i] = AVGW
+		output["date"].([]int64)[i] = t.UnixNano()/ int64(time.Millisecond)
+		//log.Printf("%s min %.8f max %.8f open %.8f close %.8f avg %.8f avg-w %.8f volume %.4f %f\n", t.Format(time.RFC3339), MIN, MAX, FIRST, LAST, AVG, AVGW,VOLUME,STDDEV)
 	}
 
 	return output,nil
