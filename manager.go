@@ -77,20 +77,21 @@ func (ma *Manager) Start(port int64){
 				ma.insertTradeData(pair, "poloniex", his)
 			}
 		}
-		log.Println("poloniex.PushApi init ...")
-		poloniex.PushApi(poloPairs, func(pair string, data []tr.TradeData) {
-			//insert Data
-			ma.insertTradeData(pair, "poloniex", data)
-			for _, trader := range ma.traders["poloniex"][pair] {
-				trader.Call(trader, data[len(data)-1])
+		for  {
+			time.Sleep(time.Second*1)
+			for _,pair := range poloPairs{
+				now := time.Now()
+				bef := now.Add(-time.Minute)
+				hds := p.TradeHistory(pair, bef, now)
+				ma.insertTradeData(pair, "poloniex", hds)
+				//DB Data
+				before := time.Now().Add(-time.Hour*24)
+				before =  time.Date(before.Year(),before.Month(),before.Day(),0,0,0,0,time.UTC)
+				hd,_ := ma.db.TradeHistory("BTC_ETH","poloniex",before,time.Now().Add(time.Minute*5),2000,"5m")
+				ma.sse.Notifier <- []byte(ma.historyToJson(hd))
 			}
+		}
 
-			before := time.Now().Add(-time.Hour*24)
-			hd,_ := ma.db.TradeHistory("BTC_ETH","poloniex",before,time.Now(),2000,"5m")
-
-			//log.Println(finaljson)
-			ma.sse.Notifier <- []byte(ma.historyToJson(hd))
-		})
 	}()
 	log.Println("start web server (server send event)")
 	ma.webServerStart(port)

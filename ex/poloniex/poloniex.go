@@ -225,10 +225,11 @@ func (ex *EX_Poloniex)TradeHistory(pair string,start time.Time,end time.Time) []
 			//fmt.Println(data[i],TradeID)
 		}
 		returnData = append(returnData,data...)
+
 		first_d := data[0].Date.Format("2006-01-02 15:04:05")
 		start_d := start.Format("2006-01-02 15:04:05")
-		log.Println(start_d,first_d)
-		if (first_d != start_d) {
+
+		if first_d != start_d {
 			start = data[0].Date
 			continue
 		}
