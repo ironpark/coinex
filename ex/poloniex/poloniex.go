@@ -188,42 +188,53 @@ func (ex *EX_Poloniex) doTimeoutRequest(timer *time.Timer, req *http.Request) (*
 }
 
 func (ex *EX_Poloniex)TradeHistory(pair string,start time.Time,end time.Time) []trader.TradeData{
-	ressource := fmt.Sprintf("?command=returnTradeHistory&currencyPair=%s&start=%d&end=%d",pair,start.Unix(),end.Unix())
-	result ,err := ex.do(ressource,"",false)
-	if err != nil{
-		return nil
-	}
-	type trade map[string] interface{}
-	trades := []trade{}
+	var returnData []trader.TradeData = []trader.TradeData{}
+	for {
 
-	err = json.Unmarshal(result, &trades)
-	if err != nil{
-		return nil
-	}
-
-	data := make([]trader.TradeData, len(trades))
-
-	for i,x := range trades{
-		TradeID := x["tradeID"].(float64)
-		Amount,_ := strconv.ParseFloat(x["amount"].(string),64)
-		Rate,_ := strconv.ParseFloat(x["rate"].(string),64)
-		Total,_ :=strconv.ParseFloat( x["total"].(string),64)
-		Type :=	x["type"].(string)
-		Date, _ := time.Parse("2006-01-02 15:04:05", x["date"].(string))
-		data[i].ID = int64(TradeID)
-		data[i].Amount = Amount
-		data[i].Price = Rate
-		data[i].Total = Total
-		data[i].Type = Type
-
-		
+		ressource := fmt.Sprintf("?command=returnTradeHistory&currencyPair=%s&start=%d&end=%d", pair, start.Unix(), end.Unix())
+		result, err := ex.do(ressource, "", false)
 		if err != nil {
-			log.Panic(err)
+			return nil
 		}
-		data[i].Date = Date
-		//fmt.Println(data[i])
+		type trade map[string]interface{}
+		trades := []trade{}
+		err = json.Unmarshal(result, &trades)
+		if err != nil {
+			return nil
+		}
+
+		data := make([]trader.TradeData, len(trades))
+
+		for i, x := range trades {
+			TradeID := x["tradeID"].(float64)
+			Amount, _ := strconv.ParseFloat(x["amount"].(string), 64)
+			Rate, _ := strconv.ParseFloat(x["rate"].(string), 64)
+			Total, _ := strconv.ParseFloat(x["total"].(string), 64)
+			Type := x["type"].(string)
+			Date, _ := time.Parse("2006-01-02 15:04:05", x["date"].(string))
+			data[i].ID = int64(TradeID)
+			data[i].Amount = Amount
+			data[i].Price = Rate
+			data[i].Total = Total
+			data[i].Type = Type
+
+			if err != nil {
+				log.Panic(err)
+			}
+			data[i].Date = Date
+			//fmt.Println(data[i],TradeID)
+		}
+		returnData = append(returnData,data...)
+		first_d := data[0].Date.Format("2006-01-02 15:04:05")
+		start_d := start.Format("2006-01-02 15:04:05")
+		log.Println(start_d,first_d)
+		if (first_d != start_d) {
+			start = data[0].Date
+			continue
+		}
+		break
 	}
-	return data
+	return returnData
 }
 
 func getNewTrade(args []interface{}) []trader.TradeData{
@@ -239,7 +250,6 @@ func getNewTrade(args []interface{}) []trader.TradeData{
 			Amount, _ := strconv.ParseFloat(msgData["amount"].(string), 64)
 			Total, _ := strconv.ParseFloat(msgData["total"].(string), 64)
 			Date, _ := time.Parse("2006-01-02 15:04:05", msgData["date"].(string))
-			fmt.Println(msgData["date"].(string))
 			datas = append(datas, trader.TradeData{
 				Type:   Type,
 				ID:     TradeID,
@@ -278,8 +288,9 @@ func PushApi(pair []string,callback func(pair string,trades []trader.TradeData))
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	//p := NewTrader("","","BTC_ETH")
 	ws.ReceiveDone = make(chan bool)
+	//now := time.Now()
 	for x := range pair {
 		currency := pair[x]
 		log.Printf("poloniex push api '%s' subcribe\n",currency)
@@ -292,7 +303,19 @@ func PushApi(pair []string,callback func(pair string,trades []trader.TradeData))
 				return
 			}
 			callback(currency,trades)
+			fmt.Println(trades[len(trades)-1].Date,trades[len(trades)-1].ID)
+			//th := p.TradeHistory(currency,now,time.Now())
+			//for _,item := range th{
+			//	for _,item2 := range trades{
+			//		if item.ID ==  item2.ID{
+			//			log.Println("!!!!!!!!!",item.Date,item.ID,item.Amount,item.Type)
+			//			log.Println("!!!!!!!!!",item2.Date,item2.ID,item2.Amount,item2.Type)
+			//		}
+			//	}
+			//}
+
 		})
+
 	}
 	log.Println("listening for meta events")
 	<-ws.ReceiveDone

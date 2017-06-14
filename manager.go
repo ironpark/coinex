@@ -58,7 +58,7 @@ func (ma *Manager) insertTradeData(pair string,ex string,data []tr.TradeData)  {
 		//fmt.Println(d.Date)
 	}
 	err := ma.db.Write(bp)
-	if(err != nil){
+	if err != nil {
 		log.Fatal(err)
 	}
 }
@@ -85,32 +85,36 @@ func (ma *Manager) Start(port int64){
 				trader.Call(trader, data[len(data)-1])
 			}
 
-			before := time.Now().Add(-time.Hour*24*30)
-			hd,_ := ma.db.TradeHistory("BTC_ETH","poloniex",before,time.Now(),1000,"1m")
+			before := time.Now().Add(-time.Hour*24)
+			hd,_ := ma.db.TradeHistory("BTC_ETH","poloniex",before,time.Now(),2000,"5m")
 
-			dates   := hd.Time()
-			closes  := hd.Last()
-			opens   := hd.First()
-			highs   := hd.High()
-			lows    := hd.Low()
-			volumes := hd.Volume()
-			//fmt.Println(opens)
-			finaljson := "["
-			for i := range dates {
-				finaljson += fmt.Sprintf(
-					"{\"date\":%d,\"open\":%.9f,\"high\":%.9f,\"low\":%.9f,\"close\":%.9f,\"volume\":%.9f}",
-					dates[i],opens[i],highs[i],lows[i],closes[i],volumes[i])
-				if len(volumes) -1 !=  i {
-					finaljson += ","
-				}
-			}
-			finaljson += "]"
 			//log.Println(finaljson)
-			ma.sse.Notifier <- []byte(finaljson)
+			ma.sse.Notifier <- []byte(ma.historyToJson(hd))
 		})
 	}()
 	log.Println("start web server (server send event)")
 	ma.webServerStart(port)
+}
+
+func (ma *Manager) historyToJson(hd tr.TikerData) string {
+	dates   := hd.Time()
+	closes  := hd.Last()
+	opens   := hd.First()
+	highs   := hd.High()
+	lows    := hd.Low()
+	volumes := hd.Volume()
+	//fmt.Println(opens)
+	finaljson := "["
+	for i := range dates {
+		finaljson += fmt.Sprintf(
+			"{\"date\":%d,\"open\":%.9f,\"high\":%.9f,\"low\":%.9f,\"close\":%.9f,\"volume\":%.9f}",
+			dates[i],opens[i],highs[i],lows[i],closes[i],volumes[i])
+		if len(volumes) -1 !=  i {
+			finaljson += ","
+		}
+	}
+	finaljson += "]"
+	return finaljson
 }
 
 func (ma *Manager) webServerStart(port int64){
