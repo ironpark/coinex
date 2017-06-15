@@ -6,6 +6,7 @@ import (
 	"log"
 	"encoding/json"
 	"github.com/ironpark/coinex/trader"
+	"errors"
 )
 
 type CoinDB struct {
@@ -120,14 +121,25 @@ func (db *CoinDB)FirstTradeHistory(name string)time.Time{
 	return t
 }
 
-func (db *CoinDB)LastTradeHistory(name string)time.Time{
+func (db *CoinDB)LastTradeHistory(name string)(time.Time,error){
 	q := newQuery().From("TradeData").TAG("cryptocurrency",name).DESC("time").Limit(1).Build()
 	res, err := db.queryDB(q)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	if len(res[0].Series) == 0{
+		return time.Now(),errors.New("No Result")
+	}
+	if len(res[0].Series[0].Values) == 0{
+		return time.Now(),errors.New("No Result")
+	}
+	if len(res[0].Series[0].Values[0]) == 0{
+		return time.Now(),errors.New("No Result")
+	}
+
 	t, _ := time.Parse(time.RFC3339,res[0].Series[0].Values[0][0].(string))
-	return t
+	return t,nil
 }
 
 func (db *CoinDB)getHistoryCount(name string) int64{
@@ -161,8 +173,8 @@ func (db *CoinDB)TradeHistory(name, exchange string,start,end time.Time,limit in
 		"SUM(\"Total\")"  ,            // volume
 		"MEAN(\"Rate\")"  ,            // Average
 		"SUM(\"Total\")/SUM(\"Amount\")",  // weighted Average
-		"STDDEV(\"Rate\")",            // stddev
-		"SPREAD(\"Rate\")",            // diff between MIN MAX
+		//"STDDEV(\"Rate\")",            // stddev
+		//"SPREAD(\"Rate\")",            // diff between MIN MAX
 	).GroupByTime(resolution).TIME(start, end).Build()
 	res, err := db.queryDB(q.Build())
 	//fmt.Println(q.Build())
@@ -181,8 +193,8 @@ func (db *CoinDB)TradeHistory(name, exchange string,start,end time.Time,limit in
 	output["volume"]  = make([]float64, count)
 	output["avg"]     = make([]float64, count)
 	output["avg-w"]   = make([]float64, count)
-	output["stddev"]  = make([]float64, count)
-	output["spread"]  = make([]float64, count)
+	//output["stddev"]  = make([]float64, count)
+	//output["spread"]  = make([]float64, count)
 	output["date"]    = make([]int64, count)
 
 	for i, row := range result {
@@ -206,20 +218,20 @@ func (db *CoinDB)TradeHistory(name, exchange string,start,end time.Time,limit in
 		AVG, _ := row[6].(json.Number).Float64()
 		AVGW, _ := row[7].(json.Number).Float64()
 
-		var STDDEV,SPREAD float64
-		if row[8] != nil {
-			STDDEV, _ = row[8].(json.Number).Float64()
-		}else{
-			STDDEV = 0
-		}
-
-		if row[9] != nil {
-			SPREAD, _ = row[9].(json.Number).Float64()
-		}else{
-			SPREAD = 0
-		}
-		output["spread"].([]float64)[i] = SPREAD
-		output["stddev"].([]float64)[i] = STDDEV
+		//var STDDEV,SPREAD float64
+		//if row[8] != nil {
+		//	STDDEV, _ = row[8].(json.Number).Float64()
+		//}else{
+		//	STDDEV = 0
+		//}
+		//
+		//if row[9] != nil {
+		//	SPREAD, _ = row[9].(json.Number).Float64()
+		//}else{
+		//	SPREAD = 0
+		//}
+		//output["spread"].([]float64)[i] = SPREAD
+		//output["stddev"].([]float64)[i] = STDDEV
 
 		output["low"].([]float64)[i] = MIN
 		output["high"].([]float64)[i] = MAX

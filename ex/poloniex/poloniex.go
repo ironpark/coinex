@@ -19,7 +19,7 @@ import (
 	"net"
 	"log"
 )
-const DefaultLimit = 500
+const DefaultLimit = 5000000
 //JSON DataStruct
 
 type EX_Poloniex struct {
@@ -47,7 +47,7 @@ func NewTrader(key,secret string,pair string) *EX_Poloniex {
 
 func (c *EX_Poloniex) TickerData(resolution string) trader.TikerData{
 	before := time.Now().Add(-time.Hour*24*30)
-	data,_ := c.db.TradeHistory(c.crypto,"poloniex",before,time.Now().Add(time.Minute*2),DefaultLimit,resolution)
+	data,_ := c.db.TradeHistory(c.crypto,"poloniex",before,time.Now().Add(time.Minute*15),DefaultLimit,resolution)
 	return data
 }
 
@@ -202,8 +202,12 @@ func (ex *EX_Poloniex)TradeHistory(pair string,start time.Time,end time.Time) []
 		if err != nil {
 			return nil
 		}
+		count := len(trades)
+		if count == 0{
+			break;
+		}
 
-		data := make([]trader.TradeData, len(trades))
+		data := make([]trader.TradeData, count)
 
 		for i, x := range trades {
 			TradeID := x["tradeID"].(float64)
@@ -235,6 +239,7 @@ func (ex *EX_Poloniex)TradeHistory(pair string,start time.Time,end time.Time) []
 		}
 		break
 	}
+
 	return returnData
 }
 

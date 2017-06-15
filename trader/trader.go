@@ -1,8 +1,8 @@
 package trader
 
 import "time"
-
-type TradeData struct {
+//import "fmt"
+ type TradeData struct {
 	ID int64
 	Type string
 	Amount float64
@@ -30,6 +30,8 @@ type Oder interface {
 	IsOpen() bool
 }
 
+type TickerValue []float64
+
 type Trader interface {
 	TickerData(resolution string) TikerData
 	//info
@@ -52,34 +54,65 @@ func (balance MyBalances) Size() int{
 }
 
 //ticker
-func (ticker TikerData) Low() []float64{
+func (ticker TikerData) Low() TickerValue{
 	return ticker["low"].([]float64)
 }
 
-func (ticker TikerData) High()[]float64{
+func (ticker TikerData) High() TickerValue{
 	return ticker["high"].([]float64)
 }
 
-func (ticker TikerData) First()[]float64{
+func (ticker TikerData) Open() TickerValue{
 	return ticker["first"].([]float64)
 }
 
-func (ticker TikerData) Last() []float64{
+func (ticker TikerData) Close() TickerValue{
 	return ticker["last"].([]float64)
 }
 
-func (ticker TikerData) Volume()[]float64{
+func (ticker TikerData) Volume() TickerValue{
 	return ticker["volume"].([]float64)
 }
 
-func (ticker TikerData) Avg()[]float64{
+func (ticker TikerData) Avg() TickerValue{
 	return ticker["avg"].([]float64)
 }
 
-func (ticker TikerData) WeightedAvg()[]float64{
+func (ticker TikerData) WeightedAvg() TickerValue{
 	return ticker["avg-w"].([]float64)
 }
 
-func (ticker TikerData) Time()[]int64{
+func (ticker TikerData) Time() []int64{
 	return ticker["date"].([]int64)
+}
+
+func (value TickerValue) Last () float64 {
+	return value[len(value)-1]
+}
+//math
+func (value TickerValue) Sma (length ,offset int) float64 {
+	fulllen := len(value) - 1
+	sum :=0.0
+	for i:=0; i <= length; i++  {
+		sum+= value[(fulllen - i -1 -offset)]
+	}
+	return sum/float64(length)
+}
+
+func (value TickerValue) Ema (length,offset int ) float64 {
+	alpha := 2.0 / (float64(offset) + 1.0)
+
+	//sma
+	sum:= 0.0
+	for i:=0; i <= length; i++  {
+		sum += value[i]
+	}
+	sma1 := sum/float64(length)
+	//ema-first
+	emaOne := 0.0
+	for i:=length; i <= length+length; i++  {
+		emaOne = alpha*value[i] + (1-alpha)*sma1
+	}
+	//ema-all
+	return emaOne
 }
