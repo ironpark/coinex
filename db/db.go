@@ -5,8 +5,8 @@ import (
 	"time"
 	"log"
 	"encoding/json"
-	"github.com/ironpark/coinex/trader"
 	"errors"
+	"github.com/ironpark/coinex/trader"
 )
 
 type CoinDB struct {

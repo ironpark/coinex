@@ -1,6 +1,7 @@
 package trader
 
 import "time"
+import talib "github.com/markcheno/go-talib"
 //import "fmt"
  type TradeData struct {
 	ID int64
@@ -89,30 +90,19 @@ func (ticker TikerData) Time() []int64{
 func (value TickerValue) Last () float64 {
 	return value[len(value)-1]
 }
+func (value TickerValue) Before (offset int ) float64 {
+	return value[len(value)-1 -offset]
+}
 //math
-func (value TickerValue) Sma (length ,offset int) float64 {
-	fulllen := len(value) - 1
-	sum :=0.0
-	for i:=0; i <= length; i++  {
-		sum+= value[(fulllen - i -1 -offset)]
-	}
-	return sum/float64(length)
+func (value TickerValue) Sma (period int) TickerValue {
+	return talib.Sma(value,period)
 }
 
-func (value TickerValue) Ema (length,offset int ) float64 {
-	alpha := 2.0 / (float64(offset) + 1.0)
+//To-Do..
+func (value TickerValue) Ema (period int) TickerValue {
+	return talib.Ema(value,period)
+}
 
-	//sma
-	sum:= 0.0
-	for i:=0; i <= length; i++  {
-		sum += value[i]
-	}
-	sma1 := sum/float64(length)
-	//ema-first
-	emaOne := 0.0
-	for i:=length; i <= length+length; i++  {
-		emaOne = alpha*value[i] + (1-alpha)*sma1
-	}
-	//ema-all
-	return emaOne
+func (value TickerValue) Size () int {
+	return len(value)
 }

@@ -74,8 +74,8 @@ func (ma *Manager) Start(port int64){
 		for pair := range ma.traders["poloniex"] {
 			last,err := ma.db.LastTradeHistory(pair);
 			if err != nil {
-				fmt.Println("1day")
-				last = last.Add(-time.Hour*24)
+				fmt.Println("4day")
+				last = last.Add(-time.Hour*24*4)
 			}
 			poloPairs = append(poloPairs, pair)
 			his := p.TradeHistory(pair, last, now)
