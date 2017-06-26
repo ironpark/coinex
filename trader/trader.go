@@ -16,11 +16,10 @@ type TikerData map[string]interface{}
 type MyOders map[string]string
 type MyBalances []Balance
 
-type Balance struct {
-	Name string
-	Amount float64
-	OnOders float64
-
+type Balance interface {
+	Currency() string
+	Available() float64
+	All() float64
 }
 
 type Oder interface {
@@ -31,22 +30,22 @@ type Oder interface {
 	IsOpen() bool
 }
 
-type TickerValue []float64
+type CurrencyPair interface {
+	SellOder(amount,price float64) Oder
+	BuyOder(amount,price float64) Oder
+	TickerData(resolution string) TikerData
+}
 
 type Trader interface {
-	TickerData(resolution string) TikerData
 	//info
 	MyOpenOders() []Oder
 	MyBalance() (MyBalances,error)
-
-	//trade
-	SellOder(pair string,amount,price float64) Oder
-	BuyOder(pair string,amount,price float64) Oder
-
-	SetTradeCallback(func(trader Trader,data TradeData))
-	Pair() string
-	Call(Trader,TradeData)
 	Exchange() string
+	//trade
+	SetTradeCallback(func(trader Trader,pair CurrencyPair))
+	Pair(pair string) CurrencyPair
+	//callback
+	Call(Trader,TradeData)
 }
 
 //balance
@@ -55,6 +54,8 @@ func (balance MyBalances) Size() int{
 }
 
 //ticker
+type TickerValue []float64
+
 func (ticker TikerData) Low() TickerValue{
 	return ticker["low"].([]float64)
 }

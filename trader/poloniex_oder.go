@@ -1,10 +1,14 @@
-package poloniex
+package trader
 
+import "github.com/ironPark/go-poloniex"
+
+//poloniex oder
 type poloOder struct {
 	id int64
 	price float64
 	amount float64
 	name string
+	client *poloniex.Poloniex
 }
 
 func (oder poloOder) Cancel() error{
@@ -26,3 +30,4 @@ func (oder poloOder) Name() string{
 func (oder poloOder) IsOpen() bool{
 	return false
 }
+
