@@ -1,7 +1,7 @@
 package trader
 
 import (
-	"github.com/ironPark/go-poloniex"
+	"github.com/ironpark/go-poloniex"
 )
 
 type TPoloniex struct {

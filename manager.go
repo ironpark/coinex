@@ -7,12 +7,12 @@ import (
 	"log"
 	"time"
 	"github.com/ironpark/coinex/web"
-	"github.com/ironpark/coinex/ex/poloniex"
 	"net/http"
 	"io/ioutil"
 	"runtime"
 	"path"
 	"fmt"
+	"github.com/ironpark/go-poloniex"
 )
 
 
@@ -26,7 +26,7 @@ func NewManager()(*Manager){
 	traders := map[string]map[string][]tr.Trader{}
 	dbClient ,_:= db.Default()
 
-	return &Manager{web.NewSSEServer(),traders,dbClient,}
+	return &Manager{web.NewSSEServer(),traders,dbClient}
 }
 
 func (ma *Manager) AddTrader(trader tr.Trader)  {

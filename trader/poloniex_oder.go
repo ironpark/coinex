@@ -1,6 +1,6 @@
 package trader
 
-import "github.com/ironPark/go-poloniex"
+import "github.com/ironpark/go-poloniex"
 
 //poloniex oder
 type poloOder struct {

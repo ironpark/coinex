@@ -1,36 +1,42 @@
 package bucket
 
-type Bucket struct {
+type bucket struct {
 	workers []Worker
-	running chan bool
+	running chan WorkerMessage
 }
 
-func NewBucket() *Bucket {
-	running := make(chan bool)
-	return &Bucket{running:running}
+func NewBucket() *bucket {
+	running := make(chan WorkerMessage)
+	return &bucket{running:running}
 }
 
-func (bk *Bucket)work(){
+func (bk *bucket)work(){
 	for {
 		select {
-		case <- bk.running:
+		case msg:= <- bk.running:
+			switch msg.Type {
+				//now stop
+			case "Stop":
+				//load backdatas
+			case "Load":
+				//realtime
+			case "Real":
+			}
 			return
 		default:
-			bk.doWorkers()
+
 		}
 	}
 }
 
-func (bk *Bucket) doWorkers(){
+func (bk *bucket)Run()  {
 	for _,worker := range bk.workers{
-
+		go worker.Do()
 	}
-}
 
-func (bk *Bucket)Run()  {
 	go bk.work()
 }
 
-func (bk *Bucket)Stop()  {
+func (bk *bucket)Stop()  {
 
 }
