@@ -2,6 +2,7 @@ package trader
 
 import (
 	"github.com/ironpark/go-poloniex"
+	"github.com/ironpark/coinex/db"
 )
 
 type TPoloniex struct {
@@ -14,7 +15,7 @@ func PoloniexTrader(key,secret string) *TPoloniex {
 	return ptrader
 }
 
-func (c *TPoloniex) TickerData(resolution string) TikerData{
+func (c *TPoloniex) TickerData(resolution string) db.TikerData{
 	//before := time.Now().Add(-time.Hour*24*30)
 	//data,_ := c.db.TradeHistory(c.crypto,"poloniex",before,time.Now().Add(time.Minute*60*3),DefaultLimit,resolution)
 	return nil
@@ -40,7 +41,7 @@ func (c *TPoloniex) BuyOder(pair string,amount,price float64) Oder{
 	return poloOder{}
 }
 
-func (c *TPoloniex) SetTradeCallback(callback func(trader Trader,data TradeData)){
+func (c *TPoloniex) SetTradeCallback(callback func(trader Trader,data poloniex.TradeData)){
 	//c.callback = callback
 }
 

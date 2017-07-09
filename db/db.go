@@ -6,7 +6,6 @@ import (
 	"log"
 	"encoding/json"
 	"errors"
-	"github.com/ironpark/coinex/trader"
 )
 
 type CoinDB struct {
@@ -111,18 +110,28 @@ func (db *CoinDB) Write(bp client.BatchPoints) (error) {
 }
 
 
-func (db *CoinDB)FirstTradeHistory(name string)time.Time{
-	q := newQuery().From("TradeData").TAG("cryptocurrency",name).ASC("time").Limit(1).Build()
+func (db *CoinDB)FirstTradeHistory(base,pair string)(time.Time,error){
+	q := newQuery().From("TradeData").TAG("base",base).TAG("pair",pair).ASC("time").Limit(1).Build()
 	res, err := db.queryDB(q)
 	if err != nil {
 		log.Fatal(err)
 	}
+	if len(res[0].Series) == 0{
+		return time.Now(),errors.New("No Result")
+	}
+	if len(res[0].Series[0].Values) == 0{
+		return time.Now(),errors.New("No Result")
+	}
+	if len(res[0].Series[0].Values[0]) == 0{
+		return time.Now(),errors.New("No Result")
+	}
+
 	t, _ := time.Parse(time.RFC3339, res[0].Series[0].Values[0][0].(string))
-	return t
+	return t,nil
 }
 
-func (db *CoinDB)LastTradeHistory(name string)(time.Time,error){
-	q := newQuery().From("TradeData").TAG("cryptocurrency",name).DESC("time").Limit(1).Build()
+func (db *CoinDB)LastTradeHistory(base,pair string)(time.Time,error){
+	q := newQuery().From("TradeData").TAG("base",base).TAG("pair",pair).DESC("time").Limit(1).Build()
 	res, err := db.queryDB(q)
 	if err != nil {
 		log.Fatal(err)
@@ -162,7 +171,7 @@ func (db *CoinDB)getHistoryCount(name string) int64{
 	return count
 }
 
-func (db *CoinDB)TradeHistory(name, exchange string,start,end time.Time,limit int64,resolution string) (trader.TikerData,error) {
+func (db *CoinDB)TradeHistory(name, exchange string,start,end time.Time,limit int64,resolution string) (TikerData,error) {
 
 	q := newQuery().From("TradeData").TAG("cryptocurrency", name).TAG("ex", exchange).ASC("time").Limit(limit)
 	q.Select(
@@ -181,7 +190,6 @@ func (db *CoinDB)TradeHistory(name, exchange string,start,end time.Time,limit in
 	if err != nil {
 		log.Fatal(err)
 	}
-
 
 	result := res[0].Series[0].Values
 	count := len(result)

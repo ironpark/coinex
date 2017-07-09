@@ -1,0 +1,3 @@
+[submodule "cmd/front"]
+	path = cmd/front
+	url = https://github.com/IronPark/coinex-front
