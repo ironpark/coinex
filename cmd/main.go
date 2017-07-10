@@ -24,22 +24,38 @@ func main() {
 	localConfig := Config()
 	//init bucket
 	buck := bucket.NewBucket()
-	for  _,asset:= range localConfig.Bucket.Assets {
 
+	for  _,asset:= range localConfig.Bucket.Assets {
+		fmt.Println(asset)
 		first, _ := coindb.FirstTradeHistory(asset.Base, asset.Pair)
 		last, _ := coindb.LastTradeHistory(asset.Base, asset.Pair)
+
 		log.Println(asset,first,last)
-		buck.Add(&bucket.Target{
-			Stop:     false,
-			Exchange: asset.Ex,
-			Base:     asset.Base,
-			Pair:     asset.Pair,
-			First:    first,
-			Last:     last,
-			Start:    last,
-			End:      time.Now().UTC(),
-		})
+		if asset.Start < first.UTC().Unix(){
+			buck.Add(&bucket.Target{
+				Stop:     false,
+				Exchange: asset.Ex,
+				Base:     asset.Base,
+				Pair:     asset.Pair,
+				First:    first,
+				Last:     last,
+				Start:    time.Unix(asset.Start,0),
+				End:      first,
+			})
+		}else {
+			buck.Add(&bucket.Target{
+				Stop:     false,
+				Exchange: asset.Ex,
+				Base:     asset.Base,
+				Pair:     asset.Pair,
+				First:    first,
+				Last:     last,
+				Start:    last,
+				End:      time.Now().UTC(),
+			})
+		}
 	}
+
 	buck.Run()
 
 	ui := false
@@ -57,9 +73,6 @@ func main() {
 		router.LoadHTMLGlob(resource + "/*.html")
 		router.Static("/static", resource+"/static")
 		router.GET("/", func(c *gin.Context) {
-			//if c.Request.URL.RawPath == "/"{
-			//	c.Redirect(http.StatusPermanentRedirect,"/#/home")
-			//}
 			c.HTML(http.StatusOK, "index.html", nil)
 		})
 	}
@@ -68,25 +81,39 @@ func main() {
 	{
 		//Server-Sent-Event for bucket status updates
 		v1.Handle(http.MethodGet, "/sse/bucket", func(c *gin.Context) {
+
 			listener := make(chan sse.Event)
-			id := buck.AddGlobalEventListener(func(Ex, Type, Pair string, id int64) {
+			//func(Ex,Pair,Type string,ListenerID int64)
+			id := buck.AddGlobalEventListener(func(Ex, Pair, Type string, id int64) {
 				fmt.Println(Ex, Type, Pair, id)
-				listener <- sse.Event{
-					Id:    "124",
-					Event: "message",
-					Data: map[string]interface{}{
-						Ex:   Ex,
-						Type: Type,
-						Pair: Pair,
-					},
+				for _,item := range buck.GetStatus(){
+					if item.Exchange == Ex{
+						if item.Base + "_" + item.Pair == Pair {
+							listener <- sse.Event{
+								Id:    "124",
+								Event: "message",
+								Data: map[string]interface{}{
+									"Stop":item.Stop,
+									"Exchange": item.Exchange,
+									"Base": item.Base,
+									"Pair": item.Pair,
+									"First": item.First,
+									"Last":item.Last,
+									"Type":Type,
+								},
+							}
+						}
+					}
 				}
 			})
+
 			c.Stream(func(w io.Writer) bool {
 				//TODO First Data
 				c.SSEvent("message", <-listener)
-				buck.RemoveGlobalEventListener(id)
 				return true
 			})
+			buck.RemoveGlobalEventListener(id)
+
 		})
 		//Server-Sent-Event for ticker data
 		v1.Handle(http.MethodGet, "/sse/ticker/:ex/:pair/:res", func(c *gin.Context) {
@@ -115,10 +142,6 @@ func main() {
 			})
 		})
 
-		//get bucket status
-		v1.GET("/bucket/status", func(c *gin.Context) {
-			c.JSON(http.StatusOK,buck.Assets)
-		})
 
 		//add asset tracking
 		v1.POST("/bucket/assets", func(c *gin.Context) {
@@ -141,9 +164,9 @@ func main() {
 			})
 		})
 
-		//get tracked assets
+		//get tracking assets
 		v1.GET("/bucket/assets", func(c *gin.Context) {
-			c.JSON(http.StatusOK,localConfig.Bucket.Assets)
+			c.JSON(http.StatusOK,buck.GetStatus())
 		})
 
 		//update tracked assets setting

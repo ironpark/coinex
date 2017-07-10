@@ -52,6 +52,7 @@ func (ls ListenerStore)Add(ex string,pair []string,event EventListener)  {
 	if ls[ex] == nil{
 		ls[ex] = []*AssetLisener{}
 	}
+
 	if len(ls[ex]) == 0{
 		ls[ex] = append(ls[ex],&AssetLisener{
 			ID:0,
@@ -66,6 +67,7 @@ func (ls ListenerStore)Add(ex string,pair []string,event EventListener)  {
 		})
 	}
 }
+
 func (ls ListenerStore)Call(T,ex,pair string){
 	if ls[ex] == nil{
 		return
@@ -76,8 +78,8 @@ func (ls ListenerStore)Call(T,ex,pair string){
 		}
 	}
 }
+
 type bucket struct {
-	Assets []*Target
 	workers map[string]Worker
 	msg chan WorkerMessage
 	stop chan bool
@@ -102,7 +104,6 @@ type Target struct {
 func NewBucket() *bucket {
 	db,_ := db.Default()
 	bk := &bucket{
-		Assets:[]*Target{},
 		db:db,
 		workers:make(map[string]Worker),
 		msg:make(chan WorkerMessage),
@@ -126,13 +127,22 @@ type TradeData interface {
 //bk.globalListener = listener
 //return
 //}
+func (bk *bucket)GetStatus()[]*Target{
+	targets := []*Target{}
+	for _,item := range bk.workers{
+		targets = append(targets,item.GetStatus()...)
+	}
+	return targets
+}
 func (bk *bucket)AddGlobalEventListener(listener EventListener) int64{
 	bk.globalListener = append(bk.globalListener,listener)
 	return int64(len(bk.globalListener)-1)
 }
+
 func (bk *bucket)RemoveGlobalEventListener(index int64) {
 	bk.globalListener = append(bk.globalListener[:index], bk.globalListener[index+1:]...)
 }
+
 func (bk *bucket)AddEventListener(ex string,listener EventListener,pairs... string) int64{
 	bk.listener.Add(ex,pairs,listener)
 	return int64(len(bk.listener[ex])-1)
@@ -142,7 +152,6 @@ func (bk *bucket)RemoveEventListener(ex string, id int64) {
 }
 
 func (bk *bucket)Add(target *Target) {
-	bk.Assets = append(bk.Assets,target)
 	ex := target.Exchange
 	ex = strings.ToLower(ex)
 	bk.workers[ex].Add(target)
@@ -202,8 +211,11 @@ func (bk *bucket)work(){
 			case "Real": //real time
 				bk.listener.Call(msg.Type,msg.Exchange,msg.Base+"_"+msg.Pair)
 			}
+
 			for i,item := range bk.globalListener {
-				item(msg.Type,msg.Exchange,msg.Base+"_"+msg.Pair,int64(i))
+				if item != nil {
+					item(msg.Exchange, msg.Base+"_"+msg.Pair, msg.Type, int64(i))
+				}
 			}
 
 		case <- bk.stop:

@@ -60,6 +60,7 @@ func (w *PoloniexWorker)Remove(target *Target){
 		}
 	}
 }
+
 func (w *PoloniexWorker)GetStatus()[]*Target{
 	return w.pair
 }
@@ -80,6 +81,7 @@ func (w *PoloniexWorker)Do(){
 				t1 := time.Now().Unix()
 				history, err := w.client.MarketHistory(pair, currentPair.Start, currentPair.End)
 				t2 := time.Now().Unix() - t1
+
 				if t2 == 0 {
 					time.Sleep(time.Millisecond * 1000)
 				}
@@ -90,6 +92,7 @@ func (w *PoloniexWorker)Do(){
 					time.Sleep(time.Second * 1)
 					continue
 				}
+
 				if len(history) == 0 || currentPair.LastID == history[0].GlobalTradeID{
 					continue
 				}
@@ -127,7 +130,6 @@ type BittrexWorker struct {
 	running chan bool
 }
 
-
 func NewBittrexWorker(channel chan WorkerMessage,key, secret string) *BittrexWorker {
 	return &BittrexWorker{
 		pair:[]*Target{},
@@ -151,6 +153,7 @@ func (w *BittrexWorker)Add(target Target){
 	}
 	w.pair = append(w.pair,&target)
 }
+
 //Please note that making more than 6 calls per second to the public API (Poloniex)
 func (w *BittrexWorker)Do(){
 	for {
