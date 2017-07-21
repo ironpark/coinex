@@ -2,172 +2,129 @@ package bucket
 
 import (
 	"time"
-	"log"
-	//"fmt"
 	"github.com/ironpark/go-poloniex"
-	"github.com/toorop/go-bittrex"
-	"fmt"
+	"github.com/asaskevich/EventBus"
+	cdb "github.com/ironpark/coinex/db"
+	"encoding/json"
+	log "github.com/sirupsen/logrus"
+	"github.com/IronPark/coinex/db"
 )
 
-type Worker interface {
-	Do()
-	Stop() chan bool
-	Add(target *Target)
-	Remove(target *Target)
-	GetStatus()[]*Target
-}
 //Poloniex
+type workerStatus struct{
+	lastid int
+	start time.Time
+	end time.Time
+	realtime bool
+}
 type PoloniexWorker struct {
-	pair []*Target
 	client *poloniex.Poloniex
-	msg chan WorkerMessage
-	running chan bool
+	status map[string]workerStatus
+	db *cdb.CoinDB
 }
 
-func NewPoloniexWorker(channel chan WorkerMessage,key, secret string) *PoloniexWorker {
+func Poloniex() *PoloniexWorker{
 	return &PoloniexWorker{
-		pair:[]*Target{},
-		client:poloniex.New(key,secret),
-		msg:channel,
-		running:make(chan bool),
+		client:poloniex.New("",""),
+		status:make(map[string]workerStatus),
+		db:cdb.Default(),
+	}
+}
+//first call once
+func (w *PoloniexWorker)Init(){
+	for _,item :=range w.db.GetCurrencyPairs(EXCHANGE_POLONIEX) {
+		currencyPair := item.Quote + "_" + item.Base
+		status := w.status[currencyPair]
+		status.realtime = true
+		status.lastid = -1
+		status.start = w.db.GetLastDate(EXCHANGE_POLONIEX,item)
+		status.end = time.Now().UTC().Add(time.Hour)
+		w.status[currencyPair] = status
 	}
 }
 
-func (w *PoloniexWorker)Stop() chan bool{
-	return w.running
-}
-
-func (w *PoloniexWorker)Add(target *Target){
-	fmt.Println("Add1",target)
-	for _,item := range w.pair {
-		if item.Pair == target.Pair{
-			if item.Base  == target.Base{
-				return
-			}
-		}
-	}
-	fmt.Println("Add21",target)
-	w.pair = append(w.pair,target)
-}
-
-func (w *PoloniexWorker)Remove(target *Target){
-	for i,item := range w.pair {
-		if item.Pair == target.Pair{
-			if item.Base  == target.Base{
-				w.pair = append(w.pair[:i], w.pair[i+1:]...)
-				return
-			}
-		}
+func (w *PoloniexWorker)PairInit(pair cdb.Pair,t time.Time){
+	currencyPair := pair.Quote + "_" + pair.Base
+	status ,ok := w.status[currencyPair]
+	if !ok {
+		status.start = t
+		status.end = time.Now().UTC().Add(time.Hour)
+		status.realtime = false
+		status.lastid = -1
 	}
 }
 
-func (w *PoloniexWorker)GetStatus()[]*Target{
-	return w.pair
-}
-//Please note that making more than 6 calls per second to the public API (Poloniex)
-func (w *PoloniexWorker)Do(){
-	for {
-		select {
-		case <-w.running:
-				w.msg <- WorkerMessage{Type: "Stop"}
-			return
-		default:
-			for _, currentPair := range w.pair {
-				if currentPair.Stop {
-					continue
-				}
-				errCNT := 0
-				pair := currentPair.Base + "_" + currentPair.Pair
-				t1 := time.Now().Unix()
-				history, err := w.client.MarketHistory(pair, currentPair.Start, currentPair.End)
-				t2 := time.Now().Unix() - t1
+func (w *PoloniexWorker)Do(bus EventBus.Bus,pair cdb.Pair) {
+	currencyPair := pair.Quote + "_" + pair.Base
+	status ,ok := w.status[currencyPair]
+	defer func() {
+		//update status
+		w.status[currencyPair] = status
+	}()
 
-				if t2 == 0 {
-					time.Sleep(time.Millisecond * 1000)
-				}
-
-				if err != nil {
-					errCNT++
-					log.Println(err)
-					time.Sleep(time.Second * 1)
-					continue
-				}
-
-				if len(history) == 0 || currentPair.LastID == history[0].GlobalTradeID{
-					continue
-				}
-				currentPair.LastID = history[0].GlobalTradeID
-
-				fmt.Println(pair,history[len(history)-1].Date.Local(),"~",history[0].Date.Local(),len(history))
-				currentPair.End = history[len(history)-1].Date.Time
-
-				if currentPair.First.Unix() > currentPair.End.Unix() {
-					currentPair.First = currentPair.End
-				}
-
-				if currentPair.Last.Unix() < history[0].Date.Time.Unix() {
-					currentPair.Last = history[0].Date.Time
-				}
-
-				if len(history) < 50000 {
-					w.msg <- WorkerMessage{Type: "Real", Base: currentPair.Base, Pair: currentPair.Pair, Msg: history,Exchange:"poloniex"}
-					currentPair.Start = currentPair.Last
-					currentPair.End = time.Now().UTC().Add(time.Hour)
-					continue
-				} else {
-					w.msg <- WorkerMessage{Type: "Load", Base: currentPair.Base, Pair: currentPair.Pair, Msg: history,Exchange:"poloniex"}
-				}
-
-			}
-		}
+	if !ok {
+		status.realtime = true
+		status.lastid = -1
+		status.start = time.Now()
+		status.end = time.Now().UTC().Add(time.Hour)
 	}
-}
 
-type BittrexWorker struct {
-	pair []*Target
-	client *bittrex.Bittrex
-	msg chan WorkerMessage
-	running chan bool
-}
-
-func NewBittrexWorker(channel chan WorkerMessage,key, secret string) *BittrexWorker {
-	return &BittrexWorker{
-		pair:[]*Target{},
-		client:bittrex.New(key,secret),
-		msg:channel,
-		running:make(chan bool),
+	t1 := unixMilli()
+	history, err := w.client.MarketHistory(currencyPair, status.start, status.end)
+	t2 := unixMilli() - t1
+	//prevent multiple calls in a short time.
+	if t2 < 400 {
+		time.Sleep(time.Millisecond * time.Duration(400 - t2))
 	}
-}
 
-func (w *BittrexWorker)Stop() chan bool{
-	return w.running
-}
-
-func (w *BittrexWorker)Add(target Target){
-	for _,item := range w.pair {
-		if item.Pair == target.Pair{
-			if item.Base  == target.Base{
-				return
-			}
-		}
+	if err != nil {
+		log.Println(err)
+		return
 	}
-	w.pair = append(w.pair,&target)
+	length := len(history)
+	//no data ||
+	if len(history) == 0 || status.lastid == history[0].GlobalTradeID {
+		return
+	}
+	//last id update
+	status.lastid = history[0].GlobalTradeID
+
+	historys := make([]db.MarketTake,length)
+	for i,item:= range history{
+		historys[i].Time = item.Date.Time
+		historys[i].Rate = item.Rate
+		historys[i].TradeID = item.GlobalTradeID
+		historys[i].Total = item.Total
+		historys[i].Amount = item.Amount
+	}
+
+	//switch
+	if length == 50000 {
+		status.realtime = false
+	}else{
+		status.realtime = true
+	}
+
+	if status.realtime { // realtime
+		status.start = historys[0].Time
+		status.end = time.Now().UTC().Add(time.Hour)
+	}else{  // load
+		status.end = historys[length-1].Time
+	}
+
+	//send to bucket use eventBus
+	bus.Publish(TOPIC_DATA,EXCHANGE_POLONIEX,pair,historys)
 }
 
-//Please note that making more than 6 calls per second to the public API (Poloniex)
-func (w *BittrexWorker)Do(){
-	for {
-		select {
-		case <-w.running:
-			w.msg <- WorkerMessage{Type: "Stop"}
-			return
-		default:
+func (w *PoloniexWorker)Exchange() string{
+	return EXCHANGE_POLONIEX
+}
 
-			for _, currentPair := range w.pair {
-				if currentPair.Stop {
-					continue
-				}
-			}
-		}
+func (w *PoloniexWorker)GetStatus() string{
+	b,e := json.Marshal(w.status)
+	if e != nil{
+		log.Errorf("%s worker GetStatus() %v",EXCHANGE_POLONIEX,e)
+		return "{}"
 	}
+	return string(b)
 }

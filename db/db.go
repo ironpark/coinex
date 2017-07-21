@@ -1,337 +1,268 @@
 package db
 
 import (
-	"github.com/influxdata/influxdb/client/v2"
 	"time"
-	"log"
-	"encoding/json"
-	"errors"
+	"github.com/influxdata/influxdb/client/v2"
+	"github.com/influxdata/influxdb/models"
+	log "github.com/sirupsen/logrus"
+	"fmt"
+	"strings"
 )
+
+type Config struct{
+	Host string
+	UserName string
+	Password string
+}
 
 type CoinDB struct {
-	addr string
-	username string
-	password string
-	dbname string
-	dbClient client.Client
+	config Config
+	client client.Client
+	status int64
 }
 
-type DefaultConfig struct {
-	Addr string
-	Username string
-	Password string
-	DBname string
+type Pair struct {
+	Quote string
+	Base string
 }
 
-var (
-	Config DefaultConfig
-)
-
-func init(){
-	Config.Addr = "http://localhost:8086"
-	Config.DBname = "coinex"
-	Config.Username = ""
-	Config.Password = ""
+type MarketTake struct {
+	TradeID int
+	Amount float64
+	Rate float64
+	Total float64
+	Time time.Time
 }
 
-func SetUser(name,pass string)  {
-	Config.Username = name
-	Config.Password = pass
+type OHLC struct {
+	Open float64
+	High float64
+	Low float64
+	Close float64
+	Volume float64
+	Time time.Time
 }
-
-func Default() (*CoinDB,error) {
-	return NewCoinDB(Config.Addr,Config.Username,Config.Password,Config.DBname)
-}
-
-func NewCoinDB(addr,username,password,dbname string) (*CoinDB,error) {
-
-	s := &CoinDB{
-		addr: addr,
-		username:username,
-		password:password,
-		dbname:dbname,
-	}
-	var err error = nil
-	// Create a new HTTPClient
-	s.dbClient, err = client.NewHTTPClient(client.HTTPConfig{
-		Addr:     addr,
-		Username: username,
-		Password: password,
-		Timeout: time.Minute*10,
-	})
-	if err != nil{
-		return nil,err
-	}
-	return s,nil
-}
-// queryDB convenience function to query the database
-func (db *CoinDB) queryDB(cmd string) (res []client.Result, err error) {
-	q := client.Query{
-		Command:  cmd,
-		Database: db.dbname,
-	}
-	if response, err := db.dbClient.Query(q); err == nil {
-		if response.Error() != nil {
-			return res, response.Error()
-		}
-		res = response.Results
-	} else {
-		return res, err
-	}
-	return res, nil
-}
-
-
+//for influx db
 type Tags map[string]string
 type Fields map[string]interface{}
 
-func (db *CoinDB)NewBatchPoints()(client.BatchPoints, error){
+func Default()*CoinDB {
+	return New(	Config{
+		Host:     "",
+		UserName: "",
+		Password: "",
+	})
+}
+
+func New(config Config) *CoinDB{
+	coindb := &CoinDB{}
+	var err error
+	coindb.client, err = client.NewHTTPClient(client.HTTPConfig{
+		Addr:     config.Host,
+		Username: config.UserName,
+		Password: config.Password,
+	})
+	if err != nil {
+		log.Fatal("Influxdb connect error: ", err)
+	}
+
+	if _, _, err := coindb.client.Ping(30 * time.Second); err != nil {
+		log.Fatal("Influxdb connect error: ", err)
+	} else {
+		coindb.status = 1
+		log.Info("Influxdb connect successfully")
+	}
+	//TODO check database
+	return coindb
+}
+
+//influx database wrapper
+func (db *CoinDB)batch(dbname string)(client.BatchPoints, error){
 	bp, err := client.NewBatchPoints(client.BatchPointsConfig{
-		Database:  db.dbname,
+		Database:  dbname,
 		Precision: "s",
 	})
 	return bp, err
 }
-
-func (db *CoinDB) NewPoint(tags Tags,fields Fields,date time.Time) (*client.Point,error){
+//influx database wrapper
+func (db *CoinDB)point(name string,tags Tags,fields Fields,date time.Time) (*client.Point,error){
 	pt, err := client.NewPoint(
-		"TradeData",
+		name,
 		tags,
 		fields,
 		date)
 	return pt, err
 }
 
-func (db *CoinDB) Write(bp client.BatchPoints) (error) {
-	if err := db.dbClient.Write(bp); err != nil {
+//influx database wrapper
+func (db *CoinDB) write(bp client.BatchPoints) (error) {
+	if err := db.client.Write(bp); err != nil {
 		return err
 	}
 	return nil
 }
-
-
-func (db *CoinDB)FirstTradeHistory(base,pair string)(time.Time,error){
-	q := newQuery().From("TradeData").TAG("base",base).TAG("pair",pair).ASC("time").Limit(1).Build()
-	res, err := db.queryDB(q)
-	if err != nil {
-		log.Fatal(err)
+func (db *CoinDB) putMarket(market string) error {
+	q := client.NewQuery(fmt.Sprintf(`CREATE DATABASE "market_%s"`, market), "", "")
+	if response, err := db.client.Query(q); err != nil {
+		log.Error(err)
+		return err
+	} else if err = response.Error(); err != nil {
+		log.Error(err)
+		return err
 	}
-	if len(res[0].Series) == 0{
-		return time.Now(),errors.New("No Result")
-	}
-	if len(res[0].Series[0].Values) == 0{
-		return time.Now(),errors.New("No Result")
-	}
-	if len(res[0].Series[0].Values[0]) == 0{
-		return time.Now(),errors.New("No Result")
-	}
-
-	t, _ := time.Parse(time.RFC3339, res[0].Series[0].Values[0][0].(string))
-	return t,nil
+	return nil
+}
+//Data to Point
+func (db *CoinDB)ohlc(pair Pair,data OHLC) *client.Point{
+	point, _ := db.point(pair.Base+"/"+pair.Quote,
+		Tags{
+			"pair": pair.Quote,
+			"base": pair.Base,
+		}, Fields{
+			"Open":   data.Open,
+			"High":   data.High,
+			"Low":    data.Low,
+			"Close":  data.Close,
+			"Volume": data.Volume,
+		}, data.Time)
+	return point
+}
+func (db *CoinDB)take(pair Pair,data MarketTake) *client.Point{
+	point, _ := db.point(pair.Base+"/"+pair.Quote,
+		Tags{
+			"Quote": pair.Quote,
+			"Base": pair.Base,
+		}, Fields{
+			"TradeID": data.TradeID,
+			"Amount":  data.Amount,
+			"Rate":    data.Rate,
+			"Total":   data.Total,
+		}, data.Time)
+	return point
+}
+//data insert
+func (db *CoinDB)PutOHLC(market string,pair Pair,data OHLC,date time.Time) {
+	batch, _ := db.batch(market)
+	batch.AddPoint(db.ohlc(pair,data))
+	db.write(batch)
 }
 
-func (db *CoinDB)LastTradeHistory(base,pair string)(time.Time,error){
-	q := newQuery().From("TradeData").TAG("base",base).TAG("pair",pair).DESC("time").Limit(1).Build()
-	res, err := db.queryDB(q)
-	if err != nil {
-		log.Fatal(err)
+func (db *CoinDB)PutOHLCs(market string,pair Pair,data... OHLC) {
+	batch, _ := db.batch(market)
+	for _,item := range data {
+		batch.AddPoint(db.ohlc(pair,item))
 	}
-
-	if len(res[0].Series) == 0{
-		return time.Now(),errors.New("No Result")
-	}
-	if len(res[0].Series[0].Values) == 0{
-		return time.Now(),errors.New("No Result")
-	}
-	if len(res[0].Series[0].Values[0]) == 0{
-		return time.Now(),errors.New("No Result")
-	}
-
-	t, _ := time.Parse(time.RFC3339,res[0].Series[0].Values[0][0].(string))
-	return t,nil
+	db.write(batch)
 }
 
-func (db *CoinDB)getHistoryCount(name string) int64{
-	q := newQuery().Select("count(TradeID)").From("TradeData").TAG("cryptocurrency",name).Build()
-	res, err := db.queryDB(q)
-	if err != nil {
-		return 0
-	}
-	if len(res[0].Series) == 0{
-		return 0
-	}
-	if len(res[0].Series[0].Values) == 0{
-		return 0
-	}
-	if len(res[0].Series[0].Values[0]) == 0{
-		return 0
-	}
-
-	count,_ := res[0].Series[0].Values[0][1].(json.Number).Int64()
-	return count
+func (db *CoinDB)PutMarketTake(market string,pair Pair,data MarketTake) {
+	batch, _ := db.batch(market)
+	batch.AddPoint(db.take(pair,data))
+	db.write(batch)
 }
 
-func (db *CoinDB)TradeHistory(name, exchange string,start,end time.Time,limit int64,resolution string) (TikerData,error) {
-
-	q := newQuery().From("TradeData").TAG("cryptocurrency", name).TAG("ex", exchange).ASC("time").Limit(limit)
-	q.Select(
-		"MIN(\"Rate\")",       // row
-		"MAX(\"Rate\")"   ,            // high
-		"FIRST(\"Rate\")" ,            // first(open)
-		"LAST(\"Rate\")"  ,            // last (close)
-		"SUM(\"Total\")"  ,            // volume
-		"MEAN(\"Rate\")"  ,            // Average
-		"SUM(\"Total\")/SUM(\"Amount\")",  // weighted Average
-		//"STDDEV(\"Rate\")",            // stddev
-		//"SPREAD(\"Rate\")",            // diff between MIN MAX
-	).GroupByTime(resolution).TIME(start, end).Build()
-	res, err := db.queryDB(q.Build())
-	//fmt.Println(q.Build())
-	if err != nil {
-		log.Fatal(err)
+func (db *CoinDB)PutMarketTakes(market string,pair Pair,data []MarketTake){
+	batch, _ := db.batch(market)
+	for _,item := range data {
+		batch.AddPoint(db.take(pair,item))
 	}
+	db.write(batch)
+}
 
-	result := res[0].Series[0].Values
-	count := len(result)
-	var output map[string]interface{} = make(map[string]interface{})
-	output["low"]     = make([]float64, count)
-	output["high"]    = make([]float64, count)
-	output["first"]   = make([]float64, count)
-	output["last"]    = make([]float64, count)
-	output["volume"]  = make([]float64, count)
-	output["avg"]     = make([]float64, count)
-	output["avg-w"]   = make([]float64, count)
-	//output["stddev"]  = make([]float64, count)
-	//output["spread"]  = make([]float64, count)
-	output["date"]    = make([]int64, count)
-
-	for i, row := range result {
-		if row == nil {
-			continue
+// GetMarkets return the list of market name
+func (driver *CoinDB) GetMarkets() (data []string) {
+	data = []string{}
+	q := client.NewQuery("SHOW DATABASES", "", "s")
+	if response, err := driver.client.Query(q); err == nil && response.Err == "" && len(response.Results) > 0 {
+		result := response.Results[0]
+		if result.Err == "" && len(result.Series) > 0 && len(result.Series[0].Values) > 0 {
+			for _, v := range result.Series[0].Values {
+				if len(v) > 0 {
+					name := fmt.Sprint(v[0])
+					if strings.HasPrefix(name, "market_") {
+						data = append(data, strings.TrimPrefix(name, "market_"))
+					}
+				}
+			}
 		}
-
-		t, err := time.Parse(time.RFC3339, row[0].(string))
-		if err != nil {
-			log.Fatal(err)
-		}
-		if row[1] == nil {
-			continue
-		}
-
-		MIN, _ := row[1].(json.Number).Float64()
-		MAX, _ := row[2].(json.Number).Float64()
-		FIRST, _ := row[3].(json.Number).Float64()
-		LAST, _ := row[4].(json.Number).Float64()
-		VOLUME, _ := row[5].(json.Number).Float64()
-		AVG, _ := row[6].(json.Number).Float64()
-		AVGW, _ := row[7].(json.Number).Float64()
-
-		//var STDDEV,SPREAD float64
-		//if row[8] != nil {
-		//	STDDEV, _ = row[8].(json.Number).Float64()
-		//}else{
-		//	STDDEV = 0
-		//}
-		//
-		//if row[9] != nil {
-		//	SPREAD, _ = row[9].(json.Number).Float64()
-		//}else{
-		//	SPREAD = 0
-		//}
-		//output["spread"].([]float64)[i] = SPREAD
-		//output["stddev"].([]float64)[i] = STDDEV
-
-		output["low"].([]float64)[i] = MIN
-		output["high"].([]float64)[i] = MAX
-		output["first"].([]float64)[i] = FIRST
-		output["last"].([]float64)[i] = LAST
-		output["volume"].([]float64)[i] = VOLUME
-		output["avg"].([]float64)[i] = AVG
-		output["avg-w"].([]float64)[i] = AVGW
-		output["date"].([]int64)[i] = t.UnixNano()/ int64(time.Millisecond)
-		//log.Printf("%s min %.8f max %.8f open %.8f close %.8f avg %.8f avg-w %.8f volume %.4f %f\n", t.Format(time.RFC3339), MIN, MAX, FIRST, LAST, AVG, AVGW,VOLUME,STDDEV)
 	}
-
-	return output,nil
+	return
 }
-//func (db *CoinDB)insetAllTradeHistory(name string,start time.Time) (error){
-//	pol := ex.NewPoloniex()
-//	tradeHistorys, err := pol.GetTradeHistory(name, start.Add(-time.Hour*24*365), start)
-//	if err != nil {
-//		fmt.Println(err)
-//		return err
-//	}
-//	if(len(tradeHistorys) <= 0){
-//		return nil
-//	}
-//	//insert first data
-//	db.insertTradeData(name, tradeHistorys)
-//
-//	final := tradeHistorys[len(tradeHistorys)-1]
-//	count := 0
-//	layout := "2006-01-02 15:04:05"
-//
-//	for {
-//		start, err = time.Parse(layout, final.Date)
-//		if(err != nil){
-//			fmt.Println(err)
-//		}
-//		trade_data, err := pol.GetTradeHistory(name, start.Add(-time.Hour*24*365), start)
-//		if err != nil {
-//			fmt.Println(err)
-//			break;
-//		}
-//		if len(trade_data) <= 0 {
-//			fmt.Println(len(trade_data))
-//			break;
-//		}
-//		for i := 0; i < len(trade_data); i++ {
-//			if final.TradeID == trade_data[i].TradeID {
-//				db.insertTradeData(name, trade_data[i+1:])
-//				count += len(trade_data)
-//				break
-//			}
-//		}
-//
-//		final = trade_data[len(trade_data)-1]
-//		fmt.Println("insert ", len(trade_data), "rows", final.Date)
-//		if len(trade_data) < 50000 {
-//			fmt.Println("load data complete : ", count)
-//			break
-//		}
-//		time.Sleep(time.Second*1)
-//	}
-//	return nil
-//}
-//func (db *CoinDB)UpdateTradeHistory(name string) (error) {
-//	//Get Trading History
-//	pol := poloniex.NewEXPoloniex()
-//	fmt.Println(db.getHistoryCount(name))
-//	if db.getHistoryCount(name) == 0 {
-//		fmt.Println("getHistoryCount")
-//		db.insetAllTradeHistory(name, time.Now())
-//	} else {
-//		fmt.Println("Update")
-//		//first Update
-//		last := db.getTradeHistoryLastDate(name)
-//		tradeHistorys, err := pol.GetTradeHistory(name, last, time.Now())
-//		if err != nil {
-//			fmt.Println(err)
-//			return err
-//		}
-//		db.insertTradeData(name, tradeHistorys)
-//		first := db.getTradeHistoryFirstDate(name)
-//		db.insetAllTradeHistory(name, first)
-//	}
-//	return nil
-//}
-//
-//func LoadAllChartDataPoloniex(name string) (poloniex.ChartData,error){
-//	ex := poloniex.NewEXPoloniex()
-//	resp,err:=ex.GetChartData(name,time.Unix(1451606400,0),time.Now(),300)
-//	if err != nil {
-//		fmt.Println(err)
-//		return nil,err
-//	}
-//	return resp,nil
-//}
+
+// GetMarkets return the list of GetCurrencyPair from market
+func (driver *CoinDB) GetCurrencyPairs(market string) (data []Pair) {
+	data = []Pair{}
+	q := client.NewQuery("SHOW MEASUREMENTS", "market_"+market, "s")
+	if response, err := driver.client.Query(q); err == nil && response.Err == "" && len(response.Results) > 0 {
+		result := response.Results[0]
+		if result.Err == "" && len(result.Series) > 0 && len(result.Series[0].Values) > 0 {
+			for _, v := range result.Series[0].Values {
+				if len(v) > 0 {
+					name := fmt.Sprint(v[0])
+					spl := strings.Split(name,"/")
+					data = append(data,Pair{
+						Base:spl[0],
+						Quote:spl[1],
+					})
+				}
+			}
+		}
+	}
+	return
+}
+
+// GetOHLC return the list of OHLC from CurrencyPair
+func (driver *CoinDB) GetOHLC(market string, pair Pair,start,end time.Time,period time.Duration) (data []OHLC) {
+	raw := fmt.Sprintf(
+		`SELECT FIRST("Rate"), MAX("Rate"), MIN("Rate"), LAST("Rate"), SUM("Amount") FROM "%v" WHERE time >= %vs AND time < %vs GROUP BY time(%vs)`,
+		pair.Base+"/"+pair.Quote, start, end, period)
+	q := client.NewQuery(raw, "market_"+market, "s")
+	data = []OHLC{}
+	driver.execute(q, func(row models.Row) {
+		for _,item := range row.Values {
+			t, _ := time.Parse(time.RFC3339, item[0].(string))
+			d := OHLC{
+				Time:   t,
+				Volume: item[5].(float64),
+				Open:   item[1].(float64),
+				High:   item[2].(float64),
+				Low:    item[3].(float64),
+				Close:  item[4].(float64),
+			}
+			data = append(data, d)
+		}
+	})
+	return
+}
+
+func (driver *CoinDB) GetFirstDate(market string, pair Pair) time.Time {
+	raw := fmt.Sprintf(`SELECT Amount FROM "%v" order by time asc limit 1`, pair.Base+"/"+pair.Quote)
+	q := client.NewQuery(raw, "market_"+market, "s")
+	var t time.Time = nil
+	driver.execute(q, func(row models.Row) {
+		t, _ = time.Parse(time.RFC3339, row.Values[0][0].(string))
+	})
+	return t
+}
+
+func (driver *CoinDB) GetLastDate(market string, pair Pair) time.Time {
+
+	raw := fmt.Sprintf(`SELECT Amount FROM "%v" order by time desc limit 1`, pair.Base+"/"+pair.Quote)
+	q := client.NewQuery(raw, "market_"+market, "s")
+	t := time.Now().UTC()
+
+	driver.execute(q, func(row models.Row) {
+		t, _ = time.Parse(time.RFC3339, row.Values[0][0].(string))
+	})
+
+	return t
+}
+
+func (driver *CoinDB) execute(q client.Query,fn func(row models.Row)) {
+	if response, err := driver.client.Query(q); err == nil && response.Err == "" && len(response.Results) > 0 {
+		result := response.Results[0]
+		if len(result.Series) > 0 {
+			fn(result.Series[0])
+		}
+	}
+}

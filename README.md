@@ -15,10 +15,12 @@ The following exchanges will be supported.
 
 ## Dependencies  
  - https://github.com/influxdata/influxdb/client/v2
- - https://github.com/IronPark/go-poloniex
+ - https://github.com/ironpark/go-poloniex
  - https://github.com/toorop/go-bittrex
- - https://github.com/manucorporat/sse
  - https://github.com/gin-gonic/gin
+ - https://github.com/asaskevich/EventBus
+ - https://github.com/sirupsen/logrus
+
 ## Donation
 My Ethereum Wallet :
 0x7EA84eFF0f9D3bd2EaD6Db190A4387B71ac42b44
@@ -44,4 +46,4 @@ Goals for **CoinEX**
     - [coinone](http://doc.coinone.co.kr)
 - codes
     - [go-poloniex](https://github.com/jyap808/go-poloniex)
-    
+## License

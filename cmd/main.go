@@ -8,56 +8,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"io"
-	"github.com/manucorporat/sse"
 	"runtime"
 	"path"
 	"strconv"
 	"log"
+	"github.com/gin-contrib/sse"
 )
 
 func main() {
-	coindb,err := db.Default()
-	if err != nil{
-		log.Fatal(err)
-	}
 	//load configs
 	localConfig := Config()
 	//init bucket
-	buck := bucket.NewBucket()
-
-	for  _,asset:= range localConfig.Bucket.Assets {
-		fmt.Println(asset)
-		first, _ := coindb.FirstTradeHistory(asset.Base, asset.Pair)
-		last, _ := coindb.LastTradeHistory(asset.Base, asset.Pair)
-
-		log.Println(asset,first,last)
-		if asset.Start < first.UTC().Unix(){
-			buck.Add(&bucket.Target{
-				Stop:     false,
-				Exchange: asset.Ex,
-				Base:     asset.Base,
-				Pair:     asset.Pair,
-				First:    first,
-				Last:     last,
-				Start:    time.Unix(asset.Start,0),
-				End:      first,
-			})
-		}else {
-			buck.Add(&bucket.Target{
-				Stop:     false,
-				Exchange: asset.Ex,
-				Base:     asset.Base,
-				Pair:     asset.Pair,
-				First:    first,
-				Last:     last,
-				Start:    last,
-				End:      time.Now().UTC(),
-			})
-		}
-	}
-
-	buck.Run()
-
+	buck := bucket.GetInstance()
 	ui := false
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
@@ -76,6 +38,7 @@ func main() {
 			c.HTML(http.StatusOK, "index.html", nil)
 		})
 	}
+
 	//APIS
 	v1 := router.Group("/api/v1/")
 	{
@@ -84,6 +47,9 @@ func main() {
 
 			listener := make(chan sse.Event)
 			//func(Ex,Pair,Type string,ListenerID int64)
+			buck.Subscribe(bucket.TOPIC_UPDATE, func() {
+
+			})
 			id := buck.AddGlobalEventListener(func(Ex, Pair, Type string, id int64) {
 				fmt.Println(Ex, Type, Pair, id)
 				for _,item := range buck.GetStatus(){

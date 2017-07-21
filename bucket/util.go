@@ -1,5 +1,7 @@
 package bucket
 
+import "time"
+
 func CompareStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false
@@ -17,6 +19,11 @@ func CompareStrings(a, b []string) bool {
 
 	return true
 }
+
+func unixMilli() int64 {
+	return time.Now().UnixNano() / int64(time.Millisecond)
+}
+
 func contains(s []string, e string) bool {
 	for _, a := range s {
 		if a == e {

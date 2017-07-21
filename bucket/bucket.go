@@ -1,239 +1,130 @@
 package bucket
 
 import (
+	log "github.com/sirupsen/logrus"
+	cdb "github.com/ironpark/coinex/db"
+	"github.com/asaskevich/EventBus"
+	"sync"
 	"time"
-	"log"
-	"github.com/ironpark/coinex/db"
-	"strings"
-	"github.com/ironpark/go-poloniex"
 )
-type WorkerMessage struct {
-	Type string
-	Base string
-	Pair string
-	Exchange string
-	Msg interface{}
+const (
+	/*support exchanges*/
+	EXCHANGE_POLONIEX = "poloniex"
+	EXCHANGE_BITTREX = "bittrex"
+	EXCHANGE_BITFINEX = "bitfinex"
+
+	/*subscribe topic list*/
+	//This topic is called when data comes in
+	TOPIC_DATA = "bucket:data"
+	//This topic is called when db is updated.
+	TOPIC_UPDATE = "bucket:update"
+	TOPIC_TICKER = "bucket:ticker"
+	TOPIC_STATUS = "bucket:status"
+
+)
+type UpdateEvent func(market string,pair cdb.Pair,data []cdb.MarketTake)
+
+type Worker interface {
+	Init()
+	Do(EventBus.Bus, cdb.Pair)
+	Exchange() string
+	GetStatus() string
+	PairInit(cdb.Pair,time.Time)
 }
 
-type EventMessage struct {
-	Type string
-	Base string
-	Pair string
-	Exchange string
-}
-
-//EventListener Manage
-type EventListener func(Ex,Pair,Type string,ListenerID int64)
-//type EventListener interface {
-//	Update(Type string)
-//}
-type AssetLisener struct {
-	ID       int64
-	Pairs    []string
-	Listener EventListener
-}
-type ListenerStore map[string][]*AssetLisener
-
-func (ls ListenerStore)Remove(ex string,id int64){
-
-		for i,item:= range ls[ex] {
-			if item.ID == id{
-				ls[ex] = append(ls[ex][:i], ls[ex][i+1:]...)
-			}
-		}
-
-}
-func (ls ListenerStore)RemoveAll(){
-	for k := range ls {
-		ls[k] = []*AssetLisener{}
-	}
-}
-func (ls ListenerStore)Add(ex string,pair []string,event EventListener)  {
-	if ls[ex] == nil{
-		ls[ex] = []*AssetLisener{}
-	}
-
-	if len(ls[ex]) == 0{
-		ls[ex] = append(ls[ex],&AssetLisener{
-			ID:0,
-			Pairs:pair,
-			Listener:event,
-		})
-	}else{
-		ls[ex] = append(ls[ex],&AssetLisener{
-			ID:int64(len(ls[ex])),
-			Pairs:pair,
-			Listener:event,
-		})
-	}
-}
-
-func (ls ListenerStore)Call(T,ex,pair string){
-	if ls[ex] == nil{
-		return
-	}
-	for _,item:= range ls[ex] {
-		if contains(item.Pairs,pair){
-			item.Listener(ex,pair,T,item.ID)
-		}
-	}
+type Asset struct {
+	Pair cdb.Pair
+	First int64
+	Last int64
 }
 
 type bucket struct {
+	events EventBus.Bus
+	db *cdb.CoinDB
+	localAssets map[string][]Asset
 	workers map[string]Worker
-	msg chan WorkerMessage
-	stop chan bool
-	event chan EventMessage
-	db *db.CoinDB
-	listener ListenerStore
-	globalListener []EventListener
 }
+var instance *bucket
 
-type Target struct {
-	Stop bool
-	Exchange string
-	Base string
-	Pair string
-	First time.Time
-	Last time.Time
-	Start time.Time
-	End time.Time
-	LastID int
-}
+//singleton pattern
+var once sync.Once
 
-func NewBucket() *bucket {
-	db,_ := db.Default()
-	bk := &bucket{
-		db:db,
-		workers:make(map[string]Worker),
-		msg:make(chan WorkerMessage),
-		event:make(chan EventMessage),
-		listener:make(ListenerStore),
-		globalListener:[]EventListener{},
-	}
-	bk.workers["poloniex"] = Worker(NewPoloniexWorker(bk.msg,"",""))
-	return bk
-}
-
-type TradeData interface {
-	Type() string
-	TradeID() int64
-	Amount() float64
-	Rate() float64
-	Total() float64
-	Date() time.Time
-}
-//if ex == "ALL" {
-//bk.globalListener = listener
-//return
-//}
-func (bk *bucket)GetStatus()[]*Target{
-	targets := []*Target{}
-	for _,item := range bk.workers{
-		targets = append(targets,item.GetStatus()...)
-	}
-	return targets
-}
-func (bk *bucket)AddGlobalEventListener(listener EventListener) int64{
-	bk.globalListener = append(bk.globalListener,listener)
-	return int64(len(bk.globalListener)-1)
-}
-
-func (bk *bucket)RemoveGlobalEventListener(index int64) {
-	bk.globalListener = append(bk.globalListener[:index], bk.globalListener[index+1:]...)
-}
-
-func (bk *bucket)AddEventListener(ex string,listener EventListener,pairs... string) int64{
-	bk.listener.Add(ex,pairs,listener)
-	return int64(len(bk.listener[ex])-1)
-}
-func (bk *bucket)RemoveEventListener(ex string, id int64) {
-	bk.listener.Remove(ex,id)
-}
-
-func (bk *bucket)Add(target *Target) {
-	ex := target.Exchange
-	ex = strings.ToLower(ex)
-	bk.workers[ex].Add(target)
-
-}
-
-func (bk *bucket)Remove(target *Target) {
-	ex := target.Exchange
-	ex = strings.ToLower(ex)
-	if bk.workers[ex] == nil{
-
-	}else {
-		bk.workers[ex].Remove(target)
-	}
-}
-
-func (bk *bucket)insert(msg WorkerMessage)  {
-	batch, _ := bk.db.NewBatchPoints()
-	switch v :=  msg.Msg.(type) {
-	case []poloniex.Trade:
-		for _, trade := range v {
-			point, _ := bk.db.NewPoint(
-				db.Tags{
-					"CP": msg.Base + "_" + msg.Pair,
-					"base": msg.Base,
-					"pair": msg.Pair,
-					"ex":   msg.Exchange,
-					"type": trade.Type,
-				},
-				db.Fields{
-					"TradeID": trade.TradeID,
-					"Amount":  trade.Amount,
-					"Rate":    trade.Rate,
-					"Total":   trade.Total,
-				}, trade.Date.Time)
-			batch.AddPoint(point)
+func GetInstance() *bucket {
+	once.Do(func() {
+		bus := EventBus.New()
+		db:= cdb.Default()
+		instance = &bucket{
+			bus,
+			db,
+			make(map[string][]Asset),
+			make(map[string]Worker),
 		}
-	}
+		bus.Subscribe("bucket:data",instance.dataEvent)
+	})
+	return instance
+}
+func (bk *bucket)dataEvent(market string,pair cdb.Pair,data []cdb.MarketTake) {
+	//insert data in influxDB
+	bk.db.PutMarketTakes(market,pair,data)
 
-	err := bk.db.Write(batch)
-	if err != nil {
-		log.Fatal(err)
+	bk.events.Publish(TOPIC_UPDATE,pair,data)
+}
+
+func (bk *bucket)UnSubscribe(topic string,event interface{}){
+	bk.events.Unsubscribe(topic,event)
+}
+
+func (bk *bucket)Subscribe(topic string,event interface{}){
+	bk.events.Subscribe(topic,event)
+}
+
+func (bk *bucket)AddWorker(wk Worker) {
+	if wk == nil {
+		log.Panic("Worker is nil")
+		return
+	}
+	market := wk.Exchange()
+	if bk.workers[market] == nil {
+		bk.workers[market] = wk
+		bk.workers[market].Init()
+	}else{
+		log.Warnf("%s is an already added.",market)
 	}
 }
 
-func (bk *bucket)work(){
-	for {
-		select {
-		case msg:= <- bk.msg:
-			if msg.Type == "Stop" {
-				continue
-			}
-			bk.insert(msg)
-			switch msg.Type {
-			case "Load": //now stop
-				bk.listener.Call(msg.Type,msg.Exchange,msg.Base+"_"+msg.Pair)
-			case "Real": //real time
-				bk.listener.Call(msg.Type,msg.Exchange,msg.Base+"_"+msg.Pair)
-			}
-
-			for i,item := range bk.globalListener {
-				if item != nil {
-					item(msg.Exchange, msg.Base+"_"+msg.Pair, msg.Type, int64(i))
-				}
-			}
-
-		case <- bk.stop:
-			for _,worker := range bk.workers{
-				worker.Stop() <- true
-			}
-			return
-		}
+func (bk *bucket)AddToTrack(market string,pair cdb.Pair,t time.Time) {
+	if bk.workers[market] == nil{
+		log.Errorf("There is no worker process for the %s market",market)
 	}
+
+	bk.workers[market].PairInit(pair,t)
+	as := Asset{pair,0,0, }
+	//TODO set first ~ last date from database
+	bk.localAssets[market] = append(bk.localAssets[market],as)
 }
+
+
+func (bk *bucket)Close()  {
+	bk.events.Unsubscribe("bucket:data",instance.dataEvent)
+}
+
 
 func (bk *bucket)Run()  {
-	for _,worker := range bk.workers{
-		go worker.Do()
+	wg := sync.WaitGroup{}
+	for {
+		for k, v := range bk.workers {
+			market := k
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				//assets
+				for _, asset := range bk.localAssets[market] {
+					v.Do(bk.events, asset.Pair)
+				}
+			}()
+		}
+		//Wait for All workers
+		wg.Wait()
+		// TODO if called Close -> break
 	}
-	go bk.work()
-}
-
-func (bk *bucket)Stop()  {
-	bk.stop <- true
 }
