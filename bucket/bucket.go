@@ -6,6 +6,7 @@ import (
 	"github.com/asaskevich/EventBus"
 	"sync"
 	"time"
+	"github.com/ironpark/coinex/db"
 )
 const (
 	/*support exchanges*/
@@ -23,6 +24,8 @@ const (
 
 )
 type UpdateEvent func(market string,pair cdb.Pair,data []cdb.MarketTake)
+type TickerUpdateEvent func()
+type StatusUpdateEvent func(market string,pair cdb.Pair,status AssetStatus)
 
 type Worker interface {
 	Init()
@@ -32,8 +35,7 @@ type Worker interface {
 	PairInit(cdb.Pair,time.Time)
 }
 
-type Asset struct {
-	Pair cdb.Pair
+type AssetStatus struct {
 	First int64
 	Last int64
 }
@@ -41,7 +43,7 @@ type Asset struct {
 type bucket struct {
 	events EventBus.Bus
 	db *cdb.CoinDB
-	localAssets map[string][]Asset
+	localAssets map[string]map[cdb.Pair]AssetStatus
 	workers map[string]Worker
 }
 var instance *bucket
@@ -49,33 +51,98 @@ var instance *bucket
 //singleton pattern
 var once sync.Once
 
-func GetInstance() *bucket {
+func Instance() *bucket {
 	once.Do(func() {
 		bus := EventBus.New()
 		db:= cdb.Default()
 		instance = &bucket{
 			bus,
 			db,
-			make(map[string][]Asset),
+			make(map[string]map[cdb.Pair]AssetStatus),
 			make(map[string]Worker),
 		}
-		bus.Subscribe("bucket:data",instance.dataEvent)
+		//load from database
+		for _,market :=range db.GetMarkets(){
+			market_name := market
+
+			if instance.localAssets[market] == nil {
+				instance.localAssets[market] = make(map[cdb.Pair]AssetStatus)
+			}
+
+			mk := instance.localAssets[market]
+			for _,pair :=range db.GetCurrencyPairs(EXCHANGE_POLONIEX) {
+				status := mk[pair]
+				status.Last = db.GetLastDate(market_name,pair).Unix()
+				status.First = db.GetFirstDate(market,pair).Unix()
+				instance.localAssets[market][pair] = status
+			}
+		}
+
+		//poloniex worker (data crawler) add
+		instance.AddWorker(Poloniex())
+		bus.SubscribeAsync(TOPIC_DATA,instance.dataEvent,false)
 	})
 	return instance
 }
+
+func (bk *bucket)Status() map[string]map[cdb.Pair]AssetStatus{
+	return bk.localAssets
+}
+
 func (bk *bucket)dataEvent(market string,pair cdb.Pair,data []cdb.MarketTake) {
 	//insert data in influxDB
 	bk.db.PutMarketTakes(market,pair,data)
+	//log.Info(market,pair,data)
+	state := bk.localAssets[market][pair]
+	stateChange := false
+	last := data[0].Time.Unix()
+	if state.Last < last{
+		state.Last = last
+		stateChange = true
+	}
+	first := data[len(data)-1].Time.Unix()
+	if state.First > first{
+		state.First = first
+		stateChange = true
+	}
 
-	bk.events.Publish(TOPIC_UPDATE,pair,data)
+	if stateChange {
+		bk.localAssets[market][pair] = state
+		bk.events.Publish(TOPIC_STATUS, market, pair, state)
+	}
+
+
+	bk.events.Publish(TOPIC_UPDATE, market, pair, data)
+	bk.events.Publish(TOPIC_TICKER + ":" + pair.ToString())
+
 }
 
-func (bk *bucket)UnSubscribe(topic string,event interface{}){
+func (bk *bucket)unsubscribe(topic string,event interface{}){
 	bk.events.Unsubscribe(topic,event)
 }
+func (bk *bucket)subscribe(topic string,event interface{}){
+	bk.events.SubscribeAsync(topic,event,false)
+}
 
-func (bk *bucket)Subscribe(topic string,event interface{}){
-	bk.events.Subscribe(topic,event)
+//Subscribe
+func (bk *bucket)SubTickerUpdate(pair db.Pair,fu TickerUpdateEvent){
+	bk.subscribe(TOPIC_TICKER+":"+pair.ToString(),fu)
+}
+func (bk *bucket)SubStatusUpdate(fu StatusUpdateEvent){
+	bk.subscribe(TOPIC_STATUS,fu)
+}
+func (bk *bucket)SubDBUpdate(fu UpdateEvent){
+	bk.subscribe(TOPIC_UPDATE,fu)
+}
+//UnSubscribe
+func (bk *bucket)UnSubTickerUpdate(pair db.Pair,fu TickerUpdateEvent){
+	bk.unsubscribe(TOPIC_TICKER+":"+pair.ToString(),fu)
+}
+func (bk *bucket)UnSubStatusUpdate(fu StatusUpdateEvent){
+	bk.unsubscribe(TOPIC_STATUS,fu)
+}
+func (bk *bucket)UnSubDBUpdate(fu UpdateEvent){
+	bk.unsubscribe(TOPIC_UPDATE,fu)
 }
 
 func (bk *bucket)AddWorker(wk Worker) {
@@ -91,21 +158,26 @@ func (bk *bucket)AddWorker(wk Worker) {
 		log.Warnf("%s is an already added.",market)
 	}
 }
-
+var lock = sync.RWMutex{}
 func (bk *bucket)AddToTrack(market string,pair cdb.Pair,t time.Time) {
+	lock.RLock()
+	defer lock.RUnlock()
 	if bk.workers[market] == nil{
 		log.Errorf("There is no worker process for the %s market",market)
+		return
 	}
-
+	log.Infof("add to track %s %s",market,pair.ToString())
 	bk.workers[market].PairInit(pair,t)
-	as := Asset{pair,0,0, }
+	if bk.localAssets[market] == nil {
+		bk.localAssets[market] = make(map[cdb.Pair]AssetStatus)
+	}
+	bk.localAssets[market][pair] = AssetStatus{First:99999999999,Last:-9999999999}
 	//TODO set first ~ last date from database
-	bk.localAssets[market] = append(bk.localAssets[market],as)
 }
 
 
 func (bk *bucket)Close()  {
-	bk.events.Unsubscribe("bucket:data",instance.dataEvent)
+	bk.events.Unsubscribe(TOPIC_DATA,instance.dataEvent)
 }
 
 
@@ -118,8 +190,9 @@ func (bk *bucket)Run()  {
 			go func() {
 				defer wg.Done()
 				//assets
-				for _, asset := range bk.localAssets[market] {
-					v.Do(bk.events, asset.Pair)
+				for pair := range bk.localAssets[market] {
+					log.Info(pair.ToString())
+					v.Do(bk.events, pair)
 				}
 			}()
 		}

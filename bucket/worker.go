@@ -7,7 +7,7 @@ import (
 	cdb "github.com/ironpark/coinex/db"
 	"encoding/json"
 	log "github.com/sirupsen/logrus"
-	"github.com/IronPark/coinex/db"
+	"github.com/ironpark/coinex/db"
 )
 
 //Poloniex
@@ -35,7 +35,7 @@ func (w *PoloniexWorker)Init(){
 	for _,item :=range w.db.GetCurrencyPairs(EXCHANGE_POLONIEX) {
 		currencyPair := item.Quote + "_" + item.Base
 		status := w.status[currencyPair]
-		status.realtime = true
+		status.realtime = false
 		status.lastid = -1
 		status.start = w.db.GetLastDate(EXCHANGE_POLONIEX,item)
 		status.end = time.Now().UTC().Add(time.Hour)
@@ -51,6 +51,7 @@ func (w *PoloniexWorker)PairInit(pair cdb.Pair,t time.Time){
 		status.end = time.Now().UTC().Add(time.Hour)
 		status.realtime = false
 		status.lastid = -1
+		w.status[currencyPair] = status
 	}
 }
 
@@ -96,6 +97,13 @@ func (w *PoloniexWorker)Do(bus EventBus.Bus,pair cdb.Pair) {
 		historys[i].TradeID = item.GlobalTradeID
 		historys[i].Total = item.Total
 		historys[i].Amount = item.Amount
+		if item.Type == "buy"{
+			historys[i].Buy = 1
+			historys[i].Sell = 0
+		} else {
+			historys[i].Buy = 0
+			historys[i].Sell = 1
+		}
 	}
 
 	//switch

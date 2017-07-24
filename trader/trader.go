@@ -2,7 +2,7 @@ package trader
 
 import (
 	talib "github.com/markcheno/go-talib"
-	"github.com/IronPark/coinex/db"
+	"github.com/ironpark/coinex/db"
 )
 //import "fmt"
 

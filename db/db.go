@@ -7,6 +7,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"fmt"
 	"strings"
+	"encoding/json"
 )
 
 type Config struct{
@@ -26,11 +27,19 @@ type Pair struct {
 	Base string
 }
 
+func (pair Pair) ToString() string {
+	return pair.Base+"/"+pair.Quote
+}
+func (pair Pair) MarshalText() ([]byte, error) {
+	return []byte(pair.ToString()), nil
+}
 type MarketTake struct {
 	TradeID int
 	Amount float64
 	Rate float64
 	Total float64
+	Buy int
+	Sell int
 	Time time.Time
 }
 
@@ -48,7 +57,7 @@ type Fields map[string]interface{}
 
 func Default()*CoinDB {
 	return New(	Config{
-		Host:     "",
+		Host:     "http://localhost:8086",
 		UserName: "",
 		Password: "",
 	})
@@ -114,7 +123,7 @@ func (db *CoinDB) putMarket(market string) error {
 }
 //Data to Point
 func (db *CoinDB)ohlc(pair Pair,data OHLC) *client.Point{
-	point, _ := db.point(pair.Base+"/"+pair.Quote,
+	point, _ := db.point(pair.ToString(),
 		Tags{
 			"pair": pair.Quote,
 			"base": pair.Base,
@@ -128,7 +137,7 @@ func (db *CoinDB)ohlc(pair Pair,data OHLC) *client.Point{
 	return point
 }
 func (db *CoinDB)take(pair Pair,data MarketTake) *client.Point{
-	point, _ := db.point(pair.Base+"/"+pair.Quote,
+	point, _ := db.point(pair.ToString(),
 		Tags{
 			"Quote": pair.Quote,
 			"Base": pair.Base,
@@ -137,36 +146,102 @@ func (db *CoinDB)take(pair Pair,data MarketTake) *client.Point{
 			"Amount":  data.Amount,
 			"Rate":    data.Rate,
 			"Total":   data.Total,
+			"Buy":   data.Buy,
+			"Sell":   data.Sell,
 		}, data.Time)
 	return point
 }
 //data insert
 func (db *CoinDB)PutOHLC(market string,pair Pair,data OHLC,date time.Time) {
-	batch, _ := db.batch(market)
+	batch, err := db.batch("market_" + market)
+	if err != nil{
+		log.Error(err)
+	}
 	batch.AddPoint(db.ohlc(pair,data))
-	db.write(batch)
+	err = db.write(batch)
+	if err != nil{
+		if strings.Contains(err.Error(), "database not found") {
+			db.putMarket(market)
+			db.write(batch)
+			return
+		}
+	}
 }
 
 func (db *CoinDB)PutOHLCs(market string,pair Pair,data... OHLC) {
-	batch, _ := db.batch(market)
+	batch, err := db.batch("market_" + market)
+	if err != nil{
+		log.Error(err)
+	}
 	for _,item := range data {
 		batch.AddPoint(db.ohlc(pair,item))
 	}
-	db.write(batch)
+	err = db.write(batch)
+	if err != nil{
+		if strings.Contains(err.Error(), "database not found") {
+			db.putMarket(market)
+			db.write(batch)
+			return
+		}
+	}
 }
 
 func (db *CoinDB)PutMarketTake(market string,pair Pair,data MarketTake) {
-	batch, _ := db.batch(market)
+	batch, err := db.batch("market_" + market)
+	if err != nil{
+		log.Error(err)
+	}
 	batch.AddPoint(db.take(pair,data))
-	db.write(batch)
+	err = db.write(batch)
+	if err != nil{
+		if strings.Contains(err.Error(), "database not found") {
+			db.putMarket(market)
+			db.write(batch)
+			return
+		}
+	}
 }
 
-func (db *CoinDB)PutMarketTakes(market string,pair Pair,data []MarketTake){
-	batch, _ := db.batch(market)
-	for _,item := range data {
-		batch.AddPoint(db.take(pair,item))
+func (db *CoinDB)PutMarketTakes(market string,pair Pair,data []MarketTake) {
+	batch, err := db.batch("market_" + market)
+	if err != nil {
+		log.Error(err)
 	}
-	db.write(batch)
+	for _, item := range data {
+		batch.AddPoint(db.take(pair, item))
+	}
+	err = db.write(batch)
+	if err != nil {
+		if strings.Contains(err.Error(), "database not found") {
+			db.putMarket(market)
+			db.write(batch)
+			return
+		}
+	}
+}
+
+// GetOHLC return the list of OHLC from CurrencyPair TODO : This function is not tested.
+func (driver *CoinDB) GetOHLC(market string, pair Pair,start,end time.Time,period time.Duration) (data []OHLC) {
+	raw := fmt.Sprintf(
+		`SELECT FIRST("Rate"), MAX("Rate"), MIN("Rate"), LAST("Rate"), SUM("Amount") FROM "%v" WHERE time >= %vs AND time < %vs GROUP BY time(%vs)`,
+		pair.Base+"/"+pair.Quote, start, end, period)
+	q := client.NewQuery(raw, "market_"+market, "s")
+	data = []OHLC{}
+	driver.execute(q, func(row models.Row) {
+		for _,item := range row.Values {
+			t, _ := time.Parse(time.RFC3339, item[0].(string))
+			d := OHLC{
+				Time:   t,
+				Volume: item[5].(float64),
+				Open:   item[1].(float64),
+				High:   item[2].(float64),
+				Low:    item[3].(float64),
+				Close:  item[4].(float64),
+			}
+			data = append(data, d)
+		}
+	})
+	return
 }
 
 // GetMarkets return the list of market name
@@ -211,48 +286,24 @@ func (driver *CoinDB) GetCurrencyPairs(market string) (data []Pair) {
 	return
 }
 
-// GetOHLC return the list of OHLC from CurrencyPair
-func (driver *CoinDB) GetOHLC(market string, pair Pair,start,end time.Time,period time.Duration) (data []OHLC) {
-	raw := fmt.Sprintf(
-		`SELECT FIRST("Rate"), MAX("Rate"), MIN("Rate"), LAST("Rate"), SUM("Amount") FROM "%v" WHERE time >= %vs AND time < %vs GROUP BY time(%vs)`,
-		pair.Base+"/"+pair.Quote, start, end, period)
-	q := client.NewQuery(raw, "market_"+market, "s")
-	data = []OHLC{}
-	driver.execute(q, func(row models.Row) {
-		for _,item := range row.Values {
-			t, _ := time.Parse(time.RFC3339, item[0].(string))
-			d := OHLC{
-				Time:   t,
-				Volume: item[5].(float64),
-				Open:   item[1].(float64),
-				High:   item[2].(float64),
-				Low:    item[3].(float64),
-				Close:  item[4].(float64),
-			}
-			data = append(data, d)
-		}
-	})
-	return
-}
-
 func (driver *CoinDB) GetFirstDate(market string, pair Pair) time.Time {
-	raw := fmt.Sprintf(`SELECT Amount FROM "%v" order by time asc limit 1`, pair.Base+"/"+pair.Quote)
+	raw := fmt.Sprintf(`SELECT * FROM "%v" order by time asc limit 1`, pair.Base+"/"+pair.Quote)
 	q := client.NewQuery(raw, "market_"+market, "s")
-	var t time.Time = nil
+	var t time.Time = time.Now()
 	driver.execute(q, func(row models.Row) {
-		t, _ = time.Parse(time.RFC3339, row.Values[0][0].(string))
+		unixtime ,_ := row.Values[0][0].(json.Number).Int64()
+		t = time.Unix(unixtime,0)
 	})
 	return t
 }
 
 func (driver *CoinDB) GetLastDate(market string, pair Pair) time.Time {
-
-	raw := fmt.Sprintf(`SELECT Amount FROM "%v" order by time desc limit 1`, pair.Base+"/"+pair.Quote)
+	raw := fmt.Sprintf(`SELECT * FROM "%v" order by time desc limit 1`, pair.Base+"/"+pair.Quote)
 	q := client.NewQuery(raw, "market_"+market, "s")
 	t := time.Now().UTC()
-
 	driver.execute(q, func(row models.Row) {
-		t, _ = time.Parse(time.RFC3339, row.Values[0][0].(string))
+		unixtime ,_ := row.Values[0][0].(json.Number).Int64()
+		t = time.Unix(unixtime,0)
 	})
 
 	return t

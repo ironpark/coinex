@@ -1,5 +1,0 @@
-package coinex
-
-func main()  {
-	
-}
