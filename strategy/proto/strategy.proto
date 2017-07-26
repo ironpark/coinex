@@ -1,0 +1,32 @@
+syntax = "proto3";
+package proto;
+
+message Property {
+    string type = 1;
+    int32 value_int = 2;
+    float value_float = 3;
+    string value_string = 4;
+    bool value_bool = 5;
+}
+
+message Dictionary {
+    map<string, Property> customInt = 1;
+}
+
+message Information {
+    string Name = 1;
+    string Version = 2;
+    string Description = 3;
+}
+
+message Empty {}
+
+service Strategy {
+    rpc Init(Empty) returns (Empty);
+    rpc Info(Empty) returns (Information);
+
+    rpc GetProperty(Empty) returns (Dictionary);
+    rpc SetProperty(Dictionary) returns (Empty);
+
+    rpc Update(Empty) returns (Empty);
+}

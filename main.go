@@ -11,6 +11,8 @@ import (
 	"path"
 	"strconv"
 	"github.com/gin-contrib/sse"
+	"github.com/IronPark/coinex/strategy"
+	"fmt"
 )
 
 func main() {
@@ -21,7 +23,12 @@ func main() {
 	ui := false
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
-
+	s:=strategy.LoadStrategy("/Users/ironpark/GoglandProjects/strategyTest/kv-go-grpc")
+	s.Init()
+	s.Init()
+	fmt.Println(s.Info())
+	fmt.Println(s.Info())
+	s.KillProcess()
 	//init web ui
 	if ui {
 		_, filename, _, ok := runtime.Caller(0)
