@@ -9,12 +9,13 @@ type StrategyBase struct{
 }
 type Information proto.Information
 type Property map[string]interface{}
+
 type Strategy interface {
 	Init()
 	Info() Information
 	GetProperty()Property
 	SetProperty(Property)
-	Update()
+	Update() bool
 }
 
 func Create(stra Strategy) StrategyBase{
@@ -70,7 +71,9 @@ func (bs StrategyBase) SetProperty(property *proto.Dictionary ) error{
 	return nil
 }
 
-func (bs StrategyBase) Update() error{
-	bs.st.Update()
-	return nil
+func (bs StrategyBase) Update() (*proto.UpdateState, error){
+	b := &proto.UpdateState{
+		Boolean:bs.st.Update(),
+	}
+	return b, nil
 }

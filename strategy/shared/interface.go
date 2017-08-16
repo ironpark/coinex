@@ -34,7 +34,7 @@ type Strategy interface {
 	Info() (*proto.Information,error)
 	GetProperty() (*proto.Dictionary, error)
 	SetProperty(*proto.Dictionary) error
-	Update() error
+	Update() (*proto.UpdateState, error)
 }
 
 // This is the implementation of plugin.Plugin so we can serve/consume this.

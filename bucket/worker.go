@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	log "github.com/sirupsen/logrus"
 	"github.com/ironpark/coinex/db"
+	"fmt"
 )
 
 //Poloniex
@@ -17,6 +18,7 @@ type workerStatus struct{
 	end time.Time
 	realtime bool
 }
+
 type PoloniexWorker struct {
 	client *poloniex.Poloniex
 	status map[string]workerStatus
@@ -45,6 +47,7 @@ func (w *PoloniexWorker)Init(){
 
 func (w *PoloniexWorker)PairInit(pair cdb.Pair,t time.Time){
 	currencyPair := pair.Quote + "_" + pair.Base
+	fmt.Println(currencyPair)
 	status ,ok := w.status[currencyPair]
 	if !ok {
 		status.start = t

@@ -72,8 +72,9 @@ func (st *Strategy) SetProperty(property map[string]interface{}) {
 	st.strategy.SetProperty(&dic)
 }
 
-func (st *Strategy) Update() {
-	st.strategy.Update()
+func (st *Strategy) Update() bool {
+	b,_ := st.strategy.Update()
+	return b.Boolean
 }
 
 func (st *Strategy) KillProcess() {

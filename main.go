@@ -7,8 +7,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"io"
-	"runtime"
-	"path"
 	"strconv"
 	"github.com/gin-contrib/sse"
 	"github.com/IronPark/coinex/strategy"
@@ -20,33 +18,32 @@ func main() {
 	//init bucket
 	buck := bucket.Instance()
 	go buck.Run()
-	ui := false
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
+
 	s:=strategy.LoadStrategy("/Users/ironpark/GoglandProjects/strategyTest/kv-go-grpc")
 	s.Init()
 	s.Init()
 	fmt.Println(s.Info())
 	fmt.Println(s.Info())
+	fmt.Println(s.Update())
 	s.KillProcess()
-	//init web ui
-	if ui {
-		_, filename, _, ok := runtime.Caller(0)
-		if !ok {
-			panic("No caller information")
-		}
-
-		resource := path.Dir(filename) + "/front/dist"
-		router.LoadHTMLGlob(resource + "/*.html")
-		router.Static("/static", resource+"/static")
-		router.GET("/", func(c *gin.Context) {
-			c.HTML(http.StatusOK, "index.html", nil)
-		})
-	}
-
+	cdb := db.Default()
 	//APIS
 	v1 := router.Group("/api/v1/")
 	{
+		//ohlc data
+		v1.Handle(http.MethodGet,"/ticker/:market/:quote/:base/:res", func(c *gin.Context) {
+			market := c.Param("market")
+			quote := c.Param("quote")
+			base := c.Param("base")
+			res := c.Param("res")
+
+
+			ohlc := cdb.GetOHLC(market,db.Pair{Quote:quote,Base:base},time.Now().Add(-time.Hour*24),time.Now(),res)
+			c.JSON(http.StatusOK,ohlc)
+		})
+
 		//Server-Sent-Event for bucket status updates
 		v1.Handle(http.MethodGet, "/sse/bucket", func(c *gin.Context) {
 
@@ -54,17 +51,22 @@ func main() {
 			//func(Ex,Pair,Type string,ListenerID int64)
 
 			sub := func(market string, pair db.Pair, status bucket.AssetStatus) {
+				nType := "RealTime"
+				if time.Now().Unix() - status.Last > 60*10 {
+					nType = "BackFills"
+				}
+
 				listener <- sse.Event{
-					Id:    "124",
+					Id:    "",
 					Event: "message",
 					Data: map[string]interface{}{
 						"Exchange": market,
 						"Base": pair.Base,
-						"Pair": pair.Quote,
-						//"Stop":item.Stop,
+						"Quote": pair.Quote,
+						"Stop":status.IsStop,
 						"First": status.First,
 						"Last":status.Last,
-						//"Type":Type,
+						"Type":nType,
 					},
 				}
 			}
@@ -105,7 +107,7 @@ func main() {
 
 
 		////add asset tracking
-		v1.POST("/bucket/assets", func(c *gin.Context) {
+		v1.POST("/bucket", func(c *gin.Context) {
 			ex := c.PostForm("ex")
 			base := c.PostForm("base")
 			pair := c.PostForm("pair")
@@ -115,7 +117,7 @@ func main() {
 		})
 
 		//get tracking assets
-		v1.GET("/bucket/assets", func(c *gin.Context) {
+		v1.GET("/bucket", func(c *gin.Context) {
 			c.JSON(http.StatusOK,buck.Status())
 		})
 

@@ -19,6 +19,10 @@ message Information {
     string Description = 3;
 }
 
+message UpdateState {
+    bool Boolean = 1;
+}
+
 message Empty {}
 
 service Strategy {
@@ -28,5 +32,5 @@ service Strategy {
     rpc GetProperty(Empty) returns (Dictionary);
     rpc SetProperty(Dictionary) returns (Empty);
 
-    rpc Update(Empty) returns (Empty);
+    rpc Update(Empty) returns (UpdateState);
 }

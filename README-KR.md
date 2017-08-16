@@ -1,5 +1,4 @@
 # CoinEx
-[Korean](https://github.com/IronPark/coinex/blob/master/README-KR.md)
 this package is not stable.
 
 All-in-One Cryptocurrency Trading Bot
@@ -12,7 +11,9 @@ The following exchanges will be supported.
 4. Bittrex
 3. Coinone
 
-## Dependencies  
+![img](http://i.imgur.com/lNP9hgc.png)
+
+## Dependencies
  - https://github.com/influxdata/influxdb/client/v2
  - https://github.com/ironpark/go-poloniex
  - https://github.com/toorop/go-bittrex
@@ -26,7 +27,7 @@ My Ethereum Wallet :
 
 ## Roadmap
 Goals for **CoinEX**
-  
+
 - [ ] TravisCI for this package.
 
 - [ ] Trade simulation for algorithmic trading
@@ -34,7 +35,7 @@ Goals for **CoinEX**
   - [ ] Alpha Model
   - [ ] Output of trade simulation report
   - [ ] Support script lang
-  
+
 - [ ] Web-base visualization
 ## References
 - apis

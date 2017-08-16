@@ -221,7 +221,7 @@ func (db *CoinDB)PutMarketTakes(market string,pair Pair,data []MarketTake) {
 }
 
 // GetOHLC return the list of OHLC from CurrencyPair TODO : This function is not tested.
-func (driver *CoinDB) GetOHLC(market string, pair Pair,start,end time.Time,period time.Duration) (data []OHLC) {
+func (driver *CoinDB) GetOHLC(market string, pair Pair,start,end time.Time,period string) (data []OHLC) {
 	raw := fmt.Sprintf(
 		`SELECT FIRST("Rate"), MAX("Rate"), MIN("Rate"), LAST("Rate"), SUM("Amount") FROM "%v" WHERE time >= %vs AND time < %vs GROUP BY time(%vs)`,
 		pair.Base+"/"+pair.Quote, start, end, period)

@@ -40,9 +40,8 @@ func (m *GRPCClient) SetProperty(dictionary *proto.Dictionary) error {
 	return err
 }
 
-func (m *GRPCClient) Update() error {
-	_, err := m.client.Update(context.Background(), &proto.Empty{})
-	return err
+func (m *GRPCClient) Update() (*proto.UpdateState, error) {
+	return m.client.Update(context.Background(), &proto.Empty{})
 }
 
 // Here is the gRPC server that GRPCClient talks to.
@@ -67,6 +66,7 @@ func (m *GRPCServer) SetProperty(context context.Context, property *proto.Dictio
 	return &proto.Empty{}, m.Impl.SetProperty(property)
 }
 
-func (m *GRPCServer) Update(context.Context, *proto.Empty) (*proto.Empty, error) {
-	return &proto.Empty{}, m.Impl.Update()
+func (m *GRPCServer) Update(context.Context, *proto.Empty) (*proto.UpdateState, error) {
+	return m.Impl.Update()
 }
+
