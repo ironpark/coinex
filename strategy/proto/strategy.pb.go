@@ -269,7 +269,7 @@ func _Strategy_Init_Handler(srv interface{}, ctx context.Context, dec func(inter
 
 func _Strategy_Info_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(Empty)
-	if err := dec(in); err != nil {v
+	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {

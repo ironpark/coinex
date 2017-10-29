@@ -50,6 +50,7 @@ type OHLC struct {
 	Close float64
 	Volume float64
 	Time time.Time
+	Minute int
 }
 //for influx db
 type Tags map[string]string

@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"net/http"
 	"io"
-	"strconv"
+	//"strconv"
 	"github.com/gin-contrib/sse"
 	"github.com/IronPark/coinex/strategy"
 	"fmt"
@@ -111,9 +111,9 @@ func main() {
 			ex := c.PostForm("ex")
 			base := c.PostForm("base")
 			pair := c.PostForm("pair")
-			start := c.PostForm("start")
-			unix,_ := strconv.ParseInt(start,0,64)
-			buck.AddToTrack(ex,db.Pair{Quote:base,Base:pair},time.Unix(unix,0))
+			//start := c.PostForm("start")
+			//unix,_ := strconv.ParseInt(start,0,64)
+			buck.AddToTrack(ex,db.Pair{Quote:base,Base:pair})
 		})
 
 		//get tracking assets

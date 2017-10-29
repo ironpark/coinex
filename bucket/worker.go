@@ -1,141 +1,169 @@
 package bucket
 
+
 import (
-	"time"
-	"github.com/ironpark/go-poloniex"
 	"github.com/asaskevich/EventBus"
-	cdb "github.com/ironpark/coinex/db"
-	"encoding/json"
-	log "github.com/sirupsen/logrus"
-	"github.com/ironpark/coinex/db"
+	coindb "github.com/ironpark/coinex/db"
+	"github.com/google/go-cmp/cmp"
+	"github.com/ironpark/coinex/bucket/source"
+	"time"
+	"os"
+	"encoding/gob"
 	"fmt"
 )
 
-//Poloniex
-type workerStatus struct{
-	lastid int
-	start time.Time
-	end time.Time
-	realtime bool
+type Status struct{
+	First time.Time
+	Last time.Time
+	hasfirstTick bool
 }
 
-type PoloniexWorker struct {
-	client *poloniex.Poloniex
-	status map[string]workerStatus
-	db *cdb.CoinDB
-}
-
-func Poloniex() *PoloniexWorker{
-	return &PoloniexWorker{
-		client:poloniex.New("",""),
-		status:make(map[string]workerStatus),
-		db:cdb.Default(),
+// Encode via Gob to file
+func saveGob(path string, object interface{}) error {
+	file, err := os.Create(path)
+	if err == nil {
+		encoder := gob.NewEncoder(file)
+		encoder.Encode(object)
 	}
-}
-//first call once
-func (w *PoloniexWorker)Init(){
-	for _,item :=range w.db.GetCurrencyPairs(EXCHANGE_POLONIEX) {
-		currencyPair := item.Quote + "_" + item.Base
-		status := w.status[currencyPair]
-		status.realtime = false
-		status.lastid = -1
-		status.start = w.db.GetLastDate(EXCHANGE_POLONIEX,item)
-		status.end = time.Now().UTC().Add(time.Hour)
-		w.status[currencyPair] = status
-	}
+	file.Close()
+	return err
 }
 
-func (w *PoloniexWorker)PairInit(pair cdb.Pair,t time.Time){
-	currencyPair := pair.Quote + "_" + pair.Base
-	fmt.Println(currencyPair)
-	status ,ok := w.status[currencyPair]
-	if !ok {
-		status.start = t
-		status.end = time.Now().UTC().Add(time.Hour)
-		status.realtime = false
-		status.lastid = -1
-		w.status[currencyPair] = status
+// Decode Gob file
+func loadGob(path string, object interface{}) error {
+	file, err := os.Open(path)
+	if err == nil {
+		decoder := gob.NewDecoder(file)
+		err = decoder.Decode(object)
 	}
+	file.Close()
+	return err
 }
 
-func (w *PoloniexWorker)Do(bus EventBus.Bus,pair cdb.Pair) {
-	currencyPair := pair.Quote + "_" + pair.Base
-	status ,ok := w.status[currencyPair]
-	defer func() {
-		//update status
-		w.status[currencyPair] = status
+type Worker struct {
+	pairs []coindb.Pair
+	// fisrt & last time data in local database
+	status map[coindb.Pair]Status
+	// is have the last historical data?
+	inLast map[coindb.Pair]bool
+
+	bus EventBus.Bus
+	add chan coindb.Pair
+	stop chan struct{}
+	src source.DataSource
+	db *coindb.CoinDB
+}
+
+func NewWorker(bus EventBus.Bus,src source.DataSource) *Worker{
+	db := coindb.Default()
+
+	worker := &Worker{
+		pairs:db.GetCurrencyPairs(src.Name()),
+		status:make(map[coindb.Pair]Status),
+		bus:bus,
+		add:make(chan coindb.Pair),
+		stop:make(chan struct{}),
+		src:src,
+		db:db,
+	}
+
+	if worker.pairs == nil{
+		worker.pairs = []coindb.Pair{}
+	}
+
+	for _,p := range worker.pairs {
+		//get last/first update time
+		worker.status[p] = Status{worker.db.GetLastDate(src.Name(), p),worker.db.GetFirstDate(worker.src.Name(), p),false}
+	}
+
+	var lastdata map[coindb.Pair]bool
+	path := fmt.Sprintf("./%s",src.Name())
+	if loadGob(path,lastdata) != nil {
+		for _,p := range worker.pairs {
+			lastdata[p] = false
+		}
+		saveGob(path,lastdata)
+	}
+
+	worker.inLast = lastdata
+	return worker
+}
+
+func (w *Worker)Run(){
+	path := fmt.Sprintf("./%s",w.src.Name())
+	defer func(){
+		close(w.add)
 	}()
+	for {
+		select {
+		default:
+			for _,p := range w.pairs {
+				//step : historical data
+				status := w.status[p]
+				if !w.inLast[p] {
+					data,ok := w.src.BackData(p,status.First)
+					status.First = data[len(data)-1].Time
+					//update
 
-	if !ok {
-		status.realtime = true
-		status.lastid = -1
-		status.start = time.Now()
-		status.end = time.Now().UTC().Add(time.Hour)
-	}
+					if ok {
+						w.inLast[p] = true
+						saveGob(path,w.inLast)
+					}
 
-	t1 := unixMilli()
-	history, err := w.client.MarketHistory(currencyPair, status.start, status.end)
-	t2 := unixMilli() - t1
-	//prevent multiple calls in a short time.
-	if t2 < 400 {
-		time.Sleep(time.Millisecond * time.Duration(400 - t2))
-	}
+					//insert database
+					w.db.PutOHLCs(w.src.Name(),p,data...)
+					w.status[p] = status
+				}else{
+					//step : synchronization data
+					if time.Now().UTC().Unix() - status.Last.Unix() >= 120 {
+						start := time.Now().UTC()
 
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	length := len(history)
-	//no data ||
-	if len(history) == 0 || status.lastid == history[0].GlobalTradeID {
-		return
-	}
-	//last id update
-	status.lastid = history[0].GlobalTradeID
+						for {
+							data,_ := w.src.BackData(p,start)
+							lastDataTime := data[len(data)-1].Time.Unix()
+							status.Last = data[0].Time
+							w.db.PutOHLCs(w.src.Name(),p,data...)
+							w.status[p] = status
 
-	historys := make([]db.MarketTake,length)
-	for i,item:= range history{
-		historys[i].Time = item.Date.Time
-		historys[i].Rate = item.Rate
-		historys[i].TradeID = item.GlobalTradeID
-		historys[i].Total = item.Total
-		historys[i].Amount = item.Amount
-		if item.Type == "buy"{
-			historys[i].Buy = 1
-			historys[i].Sell = 0
-		} else {
-			historys[i].Buy = 0
-			historys[i].Sell = 1
+							if lastDataTime < w.status[p].Last.Unix(){
+								break
+							}
+						}
+
+
+					}else{
+						//step : realtime data
+						//TODO check the duplicated data
+						data := w.src.RealTime(p)
+						status.First = data[len(data)-1].Time
+
+						w.db.PutOHLCs(w.src.Name(),p,data...)
+						w.status[p] = status
+						//TODO check point (really work?)
+						w.bus.Publish(TOPIC_DATA, w.src.Name(), p, data)
+					}
+				}
+
+			}
+			//Add objects to track
+		case pair := <-w.add:
+			for p:= range w.pairs  {
+				if cmp.Equal(p,pair) {
+					continue
+				}
+			}
+			w.pairs = append(w.pairs,pair)
+		case <-w.stop:
+			// stop
+			return
 		}
 	}
-
-	//switch
-	if length == 50000 {
-		status.realtime = false
-	}else{
-		status.realtime = true
-	}
-
-	if status.realtime { // realtime
-		status.start = historys[0].Time
-		status.end = time.Now().UTC().Add(time.Hour)
-	}else{  // load
-		status.end = historys[length-1].Time
-	}
-
-	//send to bucket use eventBus
-	bus.Publish(TOPIC_DATA,EXCHANGE_POLONIEX,pair,historys)
 }
 
-func (w *PoloniexWorker)Exchange() string{
-	return EXCHANGE_POLONIEX
+func (w *Worker)Add(pair coindb.Pair){
+	w.add <- pair
 }
 
-func (w *PoloniexWorker)GetStatus() string{
-	b,e := json.Marshal(w.status)
-	if e != nil{
-		log.Errorf("%s worker GetStatus() %v",EXCHANGE_POLONIEX,e)
-		return "{}"
-	}
-	return string(b)
+func (w *Worker)Stop(){
+	close(w.stop)
 }

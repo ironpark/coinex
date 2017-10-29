@@ -26,6 +26,22 @@ func LoadStrategy(path string) (*Strategy){
 	st := raw.(shared.Strategy)
 	return &Strategy{client,st}
 }
+
+func LoadStrategys(path string) (*Strategy){
+	//We're a host. Start by launching the plugin process.
+	client := plugin.NewClient(&plugin.ClientConfig{
+		HandshakeConfig: shared.Handshake,
+		Plugins:         shared.PluginMap,
+		Cmd:             exec.Command("sh", "-c", path), //file path (binary or script)
+		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
+	})
+
+	rpcClient, _ := client.Client()
+	raw ,_:= rpcClient.Dispense("strategy")
+	st := raw.(shared.Strategy)
+	return &Strategy{client,st}
+}
+
 func (st *Strategy) Init() {
 	st.strategy.Init()
 }

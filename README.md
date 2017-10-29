@@ -1,18 +1,18 @@
 # CoinEx
-[Korean](https://github.com/IronPark/coinex/blob/master/README-KR.md)
-this package is not stable.
+[Korean](https://github.com/IronPark/coinex/blob/master/README-KR.md) | [English](https://github.com/IronPark/coinex/blob/master/README.md)
 
-All-in-One Cryptocurrency Trading Bot
+**CoinEX (temporary name)** is open source software that can **develop, test, share, execute and manage** trading strategies using various cryptographic exchange data.
 
-coinex is an implementation of the Cryptocurrency Exchange(Poloniex/Coinone/Bittrex and more) API (public and private) in Golang.
-The current implementation is very early and can not be used yet.
+The names and repositories will change as alpha test versions are developed.
 
-The following exchanges will be supported.
-1. Poloniex
-4. Bittrex
-3. Coinone
+**Current exchange** is as follows.
+1. Bittrex / UPbit
+2. Bitfinex
+3. Poloniex
+4. Coinone
 
-## Dependencies  
+
+## dependency
  - https://github.com/influxdata/influxdb/client/v2
  - https://github.com/ironpark/go-poloniex
  - https://github.com/toorop/go-bittrex
@@ -20,29 +20,37 @@ The following exchanges will be supported.
  - https://github.com/asaskevich/EventBus
  - https://github.com/sirupsen/logrus
 
-## Donation
-My Ethereum Wallet :
+
+## donate
+Ethereum Address:
+
+![ethereum address](https://chart.googleapis.com/chart?cht=qr&chl=%200x7EA84eFF0f9D3bd2EaD6Db190A4387B71ac42b44&chs=300x300&choe=UTF-8&chld=L|2)
+
 0x7EA84eFF0f9D3bd2EaD6Db190A4387B71ac42b44
+
+**Attention!** Do not send Ethereum Classic!
 
 ## Roadmap
 Goals for **CoinEX**
-  
-- [ ] TravisCI for this package.
 
-- [ ] Trade simulation for algorithmic trading
-  - [x] Store trade history in time series database (influxDB)
-  - [ ] Alpha Model
-  - [ ] Output of trade simulation report
-  - [ ] Support script lang
-  
-- [ ] Web-base visualization
+- [ ] TravisCI support
+
+- [ ] Simulation support for knowledmic trading
+  - [x] Storing and managing real-time price data (OHCL) using a time series database (influxDB)
+  - [ ] Plug-in system for custom trading strategy
+  - [ ] Plug-in system for trading indicators ex) SMA, EMA, ...
+  - [ ] Trading simulation using historical data and report support for performance evaluation of trading strategy
+  - [ ] Scripting language support for plug-in ecosystem (python / js)
+
+- Support visualization based on web technology
+
 ## References
 - apis
     - [poloniex](https://poloniex.com/support/api/)
     - [bittrex](https://bittrex.com/Home/Api)
-    - [bithumb](https://www.bithumb.com/u1/US127)
-    - [poloniex](https://poloniex.com/support/api/)
     - [coinone](http://doc.coinone.co.kr)
 - codes
     - [go-poloniex](https://github.com/jyap808/go-poloniex)
+
 ## License
+[MPL 2.0 (Mozilla Public License Version 2.0)](https://www.mozilla.org/en-US/MPL/2.0/)
