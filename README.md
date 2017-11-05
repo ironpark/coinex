@@ -35,7 +35,7 @@ Goals for **CoinEX**
 
 - [ ] TravisCI support
 
-- [ ] Simulation support for knowledmic trading
+- [ ] Simulation support for algorithmic trading
   - [x] Storing and managing real-time price data (OHCL) using a time series database (influxDB)
   - [ ] Plug-in system for custom trading strategy
   - [ ] Plug-in system for trading indicators ex) SMA, EMA, ...

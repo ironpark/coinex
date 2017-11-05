@@ -24,11 +24,6 @@ type bittrexOHLC struct {
 	BV   float64 `json:"candleAccTradePrice"`
 }
 
-type bittrexMarketData struct {
-	MarketName string  `json:"MarketName"`
-	Created  string  `json:"Created"`
-}
-
 type Bittrex struct {
 	httpClient  *http.Client
 	once sync.Once
@@ -47,15 +42,18 @@ func (wk *Bittrex)MarketCreated(pair db.Pair) time.Time {
 	wk.once.Do(func() {
 		resp,_ := (&http.Client{}).Get("https://bittrex.com/api/v1.1/public/getmarketsummaries")
 		body,_ := ioutil.ReadAll(resp.Body)
-		var market []bittrexMarketData
-		json.Unmarshal(body,market)
 
-		for _,e:=range market {
-			split := strings.Split(e.MarketName,"-")
+		js := make(map[string]interface{})
+		json.Unmarshal(body,&js)
+
+		for _,e:=range js["result"].([]interface{}) {
+			name := e.(map[string]interface{})["MarketName"].(string)
+			created := e.(map[string]interface{})["Created"].(string)
+			split := strings.Split(name,"-")
 			base := split[0]
 			quote := split[2]
 
-			t,_ := time.Parse("2006-01-02T15:04:05",e.Created)
+			t,_ := time.Parse("2006-01-02T15:04:05",created)
 			wk.marketCreated[db.Pair{quote,base}] = t
 		}
 	})
