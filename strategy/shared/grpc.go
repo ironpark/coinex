@@ -1,48 +1,71 @@
 package shared
 
 import (
-	"github.com/IronPark/coinex/strategy/proto"
+	"github.com/ironpark/coinex/strategy/proto"
 	"golang.org/x/net/context"
 )
 
-//Init(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error)
-//Info(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Information, error)
-//GetProperty(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Dictionary, error)
-//SetProperty(ctx context.Context, in *Dictionary, opts ...grpc.CallOption) (*Empty, error)
-//Update(ctx context.Context, in *Empty, opts ...grpc.CallOption) (*Empty, error)
-
-// GRPCClient is an implementation of KV that talks over RPC.
+// GRPCClient is an implementation of Strategy that talks over RPC.
 type GRPCClient struct{ client proto.StrategyClient }
 
-func (m *GRPCClient) Init() error {
-	_, err := m.client.Init(context.Background(), &proto.Empty{})
-	return err
+func (m *GRPCClient) Init() {
+	m.client.Init(context.Background(), &proto.Empty{})
 }
-func (m *GRPCClient) Info() (*proto.Information,error) {
-	resp, err := m.client.Info(context.Background(), &proto.Empty{})
-	if err != nil {
-		return nil, err
+func (m *GRPCClient) Info() (proto.Information) {
+	resp, _ := m.client.Info(context.Background(), &proto.Empty{})
+	return *resp
+}
+
+func (m *GRPCClient) GetProperty() (map[string]interface{}) {
+	property, _ := m.client.GetProperty(context.Background(), &proto.Empty{})
+	property_map := make(map[string]interface{})
+	for k,v := range property.CustomInt{
+		switch v.Type {
+		case "int":
+			property_map[k] = v.ValueInt
+		case "float":
+			property_map[k] = v.ValueFloat
+		case "string":
+			property_map[k] = v.ValueString
+		case "bool":
+			property_map[k] = v.ValueBool
+		}
 	}
-	return resp, nil
+	return property_map
 }
 
-func (m *GRPCClient) GetProperty() (*proto.Dictionary,error) {
-	resp, err := m.client.GetProperty(context.Background(), &proto.Empty{})
-	if err != nil {
-		return &proto.Dictionary{}, err
+func (m *GRPCClient) SetProperty(property map[string]interface{}) {
+	dic := proto.Dictionary{
+		make(map[string]*proto.Property),
 	}
-
-	return resp, nil
+	for k,value := range property{
+		switch v := value.(type) {
+		case int32:
+			dic.CustomInt[k] = &proto.Property{ValueInt:int32(v)}
+		case float32:
+			dic.CustomInt[k] = &proto.Property{ValueFloat:float32(v)}
+		case string:
+			dic.CustomInt[k] = &proto.Property{ValueString:string(v)}
+		case bool:
+			dic.CustomInt[k] = &proto.Property{ValueBool:bool(v)}
+		}
+	}
+	m.client.SetProperty(context.Background(), &dic)
 }
 
-func (m *GRPCClient) SetProperty(dictionary *proto.Dictionary) error {
-	_, err := m.client.SetProperty(context.Background(), dictionary)
-	return err
+func (m *GRPCClient) SellConditions(asset string) bool {
+	resp, _ := m.client.SellConditions(context.Background(), &proto.Asset{Name:asset})
+	return resp.Boolean
+}
+func (m *GRPCClient) BuyConditions(asset string) bool {
+	resp, _ := m.client.BuyConditions(context.Background(), &proto.Asset{Name:asset})
+	return resp.Boolean
+}
+func (m *GRPCClient) RankFilter(asset string) bool {
+	resp, _ := m.client.RankFilter(context.Background(), &proto.Asset{Name:asset})
+	return resp.Boolean
 }
 
-func (m *GRPCClient) Update() (*proto.UpdateState, error) {
-	return m.client.Update(context.Background(), &proto.Empty{})
-}
 
 // Here is the gRPC server that GRPCClient talks to.
 type GRPCServer struct {
@@ -50,23 +73,64 @@ type GRPCServer struct {
 	Impl Strategy
 }
 
+
 func (m *GRPCServer) Init(context.Context, *proto.Empty) (*proto.Empty, error) {
-	return &proto.Empty{},m.Impl.Init()
+	m.Impl.Init()
+	return &proto.Empty{},nil
 }
 
 func (m *GRPCServer) Info(context.Context, *proto.Empty) (*proto.Information, error){
-	return m.Impl.Info()
+	information := m.Impl.Info()
+	return &information,nil
 }
 
 func (m *GRPCServer) GetProperty(context.Context, *proto.Empty) (*proto.Dictionary, error) {
-	return m.Impl.GetProperty()
+	property := m.Impl.GetProperty()
+	dic := proto.Dictionary{
+		make(map[string]*proto.Property),
+	}
+	for k,value := range property{
+		switch v := value.(type) {
+		case int32:
+			dic.CustomInt[k] = &proto.Property{ValueInt:int32(v)}
+		case float32:
+			dic.CustomInt[k] = &proto.Property{ValueFloat:float32(v)}
+		case string:
+			dic.CustomInt[k] = &proto.Property{ValueString:string(v)}
+		case bool:
+			dic.CustomInt[k] = &proto.Property{ValueBool:bool(v)}
+		}
+	}
+	return &dic,nil
 }
 
 func (m *GRPCServer) SetProperty(context context.Context, property *proto.Dictionary ) (*proto.Empty, error) {
-	return &proto.Empty{}, m.Impl.SetProperty(property)
+	property_map := make(map[string]interface{})
+	for k,v := range property.CustomInt{
+		switch v.Type {
+		case "int":
+			property_map[k] = v.ValueInt
+		case "float":
+			property_map[k] = v.ValueFloat
+		case "string":
+			property_map[k] = v.ValueString
+		case "bool":
+			property_map[k] = v.ValueBool
+		}
+	}
+	m.Impl.SetProperty(property_map)
+	return &proto.Empty{},nil
 }
 
-func (m *GRPCServer) Update(context.Context, *proto.Empty) (*proto.UpdateState, error) {
-	return m.Impl.Update()
+func (m *GRPCServer) SellConditions(ctx context.Context, asset *proto.Asset) (*proto.Bool, error) {
+	return &proto.Bool{Boolean:m.Impl.SellConditions(asset.Name)},nil
+}
+
+func (m *GRPCServer) BuyConditions(ctx context.Context,asset *proto.Asset) (*proto.Bool, error) {
+	return &proto.Bool{Boolean:m.Impl.BuyConditions(asset.Name)},nil
+}
+
+func (m *GRPCServer) RankFilter(ctx context.Context,asset *proto.Asset) (*proto.Bool, error) {
+	return &proto.Bool{Boolean:m.Impl.RankFilter(asset.Name)},nil
 }
 

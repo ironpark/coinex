@@ -9,7 +9,7 @@ import (
 	"io"
 	//"strconv"
 	"github.com/gin-contrib/sse"
-	"github.com/IronPark/coinex/strategy"
+	"github.com/ironpark/coinex/strategy"
 	"fmt"
 )
 
@@ -21,12 +21,12 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 
-	s:=strategy.LoadStrategy("/Users/ironpark/GoglandProjects/strategyTest/kv-go-grpc")
+	s:=strategy.LoadStrategy("/Users/ironpark/GoglandProjects/strategyTest/main")
 	s.Init()
 	s.Init()
 	fmt.Println(s.Info())
 	fmt.Println(s.Info())
-	fmt.Println(s.Update())
+
 	s.KillProcess()
 	cdb := db.Default()
 	//APIS
@@ -42,6 +42,11 @@ func main() {
 
 			ohlc := cdb.GetOHLC(market,db.Pair{Quote:quote,Base:base},time.Now().Add(-time.Hour*24),time.Now(),res)
 			c.JSON(http.StatusOK,ohlc)
+		})
+
+		//get supported markets
+		v1.Handle(http.MethodGet,"/markets", func(c *gin.Context) {
+
 		})
 
 		//Server-Sent-Event for bucket status updates

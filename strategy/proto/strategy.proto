@@ -19,8 +19,12 @@ message Information {
     string Description = 3;
 }
 
-message UpdateState {
+message Bool {
     bool Boolean = 1;
+}
+
+message Asset {
+    string Name = 1;
 }
 
 message Empty {}
@@ -31,6 +35,10 @@ service Strategy {
 
     rpc GetProperty(Empty) returns (Dictionary);
     rpc SetProperty(Dictionary) returns (Empty);
-
-    rpc Update(Empty) returns (UpdateState);
+    //filter for long position
+    rpc SellConditions(Asset) returns (Bool);
+    //filter for short position
+    rpc BuyConditions(Asset) returns (Bool);
+    //long position priority rank
+    rpc RankFilter(Asset) returns (Bool);
 }

@@ -1,4 +1,4 @@
-[Korean](https://github.com/IronPark/coinex/blob/master/README-KR.md) | [English](https://github.com/IronPark/coinex/blob/master/README.md)
+[Korean](https://github.com/ironpark/coinex/blob/master/README-KR.md) | [English](https://github.com/ironpark/coinex/blob/master/README.md)
 
 # CoinEx
 **CoinEX(임시 가칭)** 는 다양한 암호화폐 거래소에서 거래 데이터를 실시간으로 받아와 로컬 데이터베이스에 저장 및 관리해주며 이를 기반으로 트레이딩 전략을 **개발**, **테스트**, **공유**, **관리**할 수 있는 오픈소스 플랫폼 입니다.

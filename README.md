@@ -1,5 +1,5 @@
 # CoinEx
-[Korean](https://github.com/IronPark/coinex/blob/master/README-KR.md) | [English](https://github.com/IronPark/coinex/blob/master/README.md)
+[Korean](https://github.com/ironpark/coinex/blob/master/README-KR.md) | [English](https://github.com/ironpark/coinex/blob/master/README.md)
 
 **CoinEX (temporary name)** is open source software that can **develop, test, share, execute and manage** trading strategies using various cryptographic exchange data.
 

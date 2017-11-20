@@ -14,6 +14,7 @@ const (
 	/*support exchanges*/
 	EXCHANGE_POLONIEX = "poloniex"
 	EXCHANGE_BITTREX = "bittrex"
+	EXCHANGE_UPBIT = "upbit"
 	EXCHANGE_BITFINEX = "bitfinex"
 
 	/*subscribe topic list*/
@@ -57,7 +58,7 @@ func Instance() *bucket {
 		}
 
 
-		instance.workers[EXCHANGE_BITTREX] = NewWorker(bus, source.NewBittrex())
+		instance.workers[EXCHANGE_UPBIT] = NewWorker(bus, source.NewUpbit())
 		//instance.workers = append(instance.workers,NewWorker(bus, source.NewPoloniex()))
 		//instance.workers = append(instance.workers,NewWorker(bus, source.NewUpbit()))
 		//instance.workers = append(instance.workers,NewWorker(bus, source.NewBitfinex()))

@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-type bittrexOHLC struct {
+type upbitOHLC struct {
 	Code string  `json:"code"`
 	Utc  string  `json:"candleDateTime"`
 	Kst  string  `json:"candleDateTimeKst"`
@@ -24,13 +24,13 @@ type bittrexOHLC struct {
 	BV   float64 `json:"candleAccTradePrice"`
 }
 
-type Bittrex struct {
+type Upbit struct {
 	httpClient  *http.Client
 	once sync.Once
 	marketCreated map[db.Pair]time.Time
 }
 
-func NewBittrex() *Bittrex {
+func NewUpbit() *Bittrex {
 	return &Bittrex{
 		&http.Client{},
 		sync.Once{},
@@ -39,7 +39,7 @@ func NewBittrex() *Bittrex {
 }
 
 // https://bittrex.com/api/v1.1/public/getmarketsummaries
-func (wk *Bittrex)MarketCreated(pair db.Pair) time.Time {
+func (wk *Upbit)MarketCreated(pair db.Pair) time.Time {
 	wk.once.Do(func() {
 		resp,_ := (&http.Client{}).Get("https://bittrex.com/api/v1.1/public/getmarketsummaries")
 		body,_ := ioutil.ReadAll(resp.Body)
@@ -62,16 +62,16 @@ func (wk *Bittrex)MarketCreated(pair db.Pair) time.Time {
 	return wk.marketCreated[pair]
 }
 
-func (wk *Bittrex)Status() int {
+func (wk *Upbit)Status() int {
 	return 200
 }
 
 //1 minute
-func (wk *Bittrex)Interval() int {
+func (wk *Upbit)Interval() int {
 	return 1
 }
 
-func (wk *Bittrex)BackData(pair db.Pair,date time.Time) ([]db.OHLC,bool) {
+func (wk *Upbit)BackData(pair db.Pair,date time.Time) ([]db.OHLC,bool) {
 	data :=  wk.getData(pair, date.UTC(),1000)
 	if len(data) < 1000{
 		return data,true
@@ -79,19 +79,19 @@ func (wk *Bittrex)BackData(pair db.Pair,date time.Time) ([]db.OHLC,bool) {
 	return data,false
 }
 
-func (wk *Bittrex)RealTime(pair db.Pair) []db.OHLC {
+func (wk *Upbit)RealTime(pair db.Pair) []db.OHLC {
 	return wk.getData(pair, time.Now().UTC(), 2)
 }
 
-func (wk *Bittrex)Name() string {
+func (wk *Upbit)Name() string {
 	return "bittrex"
 }
 
-func (wk *Bittrex)getData(pair db.Pair,date time.Time,limit int) []db.OHLC {
+func (wk *Upbit)getData(pair db.Pair,date time.Time,limit int) []db.OHLC {
 	return wk.get(pair,1,date.Format("2006-01-02T15:04:05.000Z"),limit)
 }
 
-func (wk *Bittrex)get(pair db.Pair,minute int,date string,limit int) []db.OHLC {
+func (wk *Upbit)get(pair db.Pair,minute int,date string,limit int) []db.OHLC {
 	//"BTC-ETH"
 	url := fmt.Sprintf("https://crix-api.upbit.com/v1/crix/candles/minutes/%d?code=CRIX.UPBIT.%s&count=%d&to=%s&ciqrandom=%d",
 		minute, fmt.Sprintf("%s-%s",pair.Base,pair.Quote), limit, "2017-10-28T16:27:00.000Z", rand.Int())

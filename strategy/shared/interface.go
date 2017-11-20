@@ -4,7 +4,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/hashicorp/go-plugin"
-	"github.com/IronPark/coinex/strategy/proto"
+	"github.com/ironpark/coinex/strategy/proto"
 	"net/rpc"
 )
 
@@ -30,11 +30,14 @@ var PluginMap = map[string]plugin.Plugin{
 
 // KV is the interface that we're exposing as a plugin.
 type Strategy interface {
-	Init() error
-	Info() (*proto.Information,error)
-	GetProperty() (*proto.Dictionary, error)
-	SetProperty(*proto.Dictionary) error
-	Update() (*proto.UpdateState, error)
+	Init()
+	Info() (proto.Information)
+	GetProperty() (map[string]interface{})
+	SetProperty(map[string]interface{})
+
+	SellConditions(string) (bool)
+	BuyConditions(string)(bool)
+	RankFilter(string) (bool)
 }
 
 // This is the implementation of plugin.Plugin so we can serve/consume this.

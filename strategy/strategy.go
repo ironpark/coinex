@@ -4,8 +4,8 @@ import (
 	"os/exec"
 
 	"github.com/hashicorp/go-plugin"
-	"github.com/IronPark/coinex/strategy/shared"
-	"github.com/IronPark/coinex/strategy/proto"
+	"github.com/ironpark/coinex/strategy/shared"
+	"github.com/ironpark/coinex/strategy/proto"
 )
 type Strategy struct {
 	rpc *plugin.Client
@@ -47,52 +47,28 @@ func (st *Strategy) Init() {
 }
 
 func (st *Strategy) Info() proto.Information {
-	info ,_ := st.strategy.Info()
-	return *info
+	return st.strategy.Info()
 }
 
 func (st *Strategy) GetProperty() map[string]interface{} {
-	property ,_ := st.strategy.GetProperty()
-	property_map := make(map[string]interface{})
-	for k,v := range property.CustomInt{
-		switch v.Type {
-		case "int":
-			property_map[k] = v.ValueInt
-		case "float":
-			property_map[k] = v.ValueFloat
-		case "string":
-			property_map[k] = v.ValueString
-		case "bool":
-			property_map[k] = v.ValueBool
-		}
-	}
-	return property_map
+	return st.strategy.GetProperty()
 }
 
 func (st *Strategy) SetProperty(property map[string]interface{}) {
-	dic := proto.Dictionary{
-		make(map[string]*proto.Property),
-	}
-	for k,value := range property{
-		switch v := value.(type) {
-		case int32:
-			dic.CustomInt[k] = &proto.Property{ValueInt:int32(v)}
-		case float32:
-			dic.CustomInt[k] = &proto.Property{ValueFloat:float32(v)}
-		case string:
-			dic.CustomInt[k] = &proto.Property{ValueString:string(v)}
-		case bool:
-			dic.CustomInt[k] = &proto.Property{ValueBool:bool(v)}
-		}
-	}
-	st.strategy.SetProperty(&dic)
+	st.strategy.SetProperty(property)
 }
 
-func (st *Strategy) Update() bool {
-	b,_ := st.strategy.Update()
-	return b.Boolean
+func (st *Strategy) SellConditions(name string) bool {
+	return st.strategy.SellConditions(name)
 }
 
+func (st *Strategy) BuyConditions(name string) bool {
+	return st.strategy.BuyConditions(name)
+}
+
+func (st *Strategy) RankFilter(name string) bool {
+	return st.strategy.RankFilter(name)
+}
 func (st *Strategy) KillProcess() {
 	st.rpc.Kill()
 }
